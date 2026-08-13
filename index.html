@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="theme-color" content="#0a0a0f"/>
+<title>Life OS — Sumu</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="styles/tokens.css"/>
+<link rel="stylesheet" href="styles/components.css"/>
+</head>
+<body>
+
+<div class="loading" id="loading">
+  <div class="loader-ring"></div>
+  <div class="loader-title">🌙 Life OS</div>
+  <div class="loader-sub" id="loader-sub">Loading...</div>
+</div>
+
+<!-- ═══ FOCUS MODE OVERLAY ═══ -->
+<div class="focus-overlay" id="focus-overlay">
+  <button class="focus-close" onclick="closeFocus()">✕</button>
+  <div id="focus-body"></div>
+</div>
+
+<!-- ═══ GENERIC BOTTOM SHEET MODAL ═══ -->
+<div class="modal-overlay" id="modal" onclick="closeModalBg(event)">
+  <div class="modal-sheet" id="modal-sheet"></div>
+</div>
+
+<nav class="nav">
+  <div class="nav-left">
+    <div class="sync-dot" id="sync-dot"></div>
+    <div class="nav-brand" id="nav-title">Today</div>
+  </div>
+  <div class="nav-right" style="display:flex;gap:5px">
+    <button class="icon-btn" onclick="toggleTheme()" id="theme-btn">🌙</button>
+    <button class="icon-btn" onclick="openSettings()">⚙</button>
+  </div>
+</nav>
+
+<main>
+  <div class="view active" id="view-today"></div>
+  <div class="view" id="view-missions"></div>
+  <div class="view" id="view-ielts"></div>
+  <div class="view" id="view-programming"></div>
+  <div class="view" id="view-jobs"></div>
+  <div class="view" id="view-weekly"></div>
+  <div class="view" id="view-history"></div>
+  <div class="view" id="view-review"></div>
+</main>
+
+<div class="tabbar">
+  <button class="tabbtn active" data-view="today" onclick="switchView('today',this)"><span class="ti">🏠</span>Today</button>
+  <button class="tabbtn" data-view="missions" onclick="switchView('missions',this)"><span class="ti">🎯</span>Missions</button>
+  <button class="tabbtn" data-view="ielts" onclick="switchView('ielts',this)"><span class="ti">🗣️</span>IELTS</button>
+  <button class="tabbtn" data-view="programming" onclick="switchView('programming',this)"><span class="ti">💻</span>Code</button>
+  <button class="tabbtn" data-view="jobs" onclick="switchView('jobs',this)"><span class="ti">💼</span>Jobs</button>
+  <button class="tabbtn" data-view="weekly" onclick="switchView('weekly',this)"><span class="ti">📊</span>Week</button>
+  <button class="tabbtn" data-view="history" onclick="switchView('history',this)"><span class="ti">📅</span>History</button>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="src/core/time.js"></script>
+<script src="src/core/prayerTimes.js"></script>
+<script src="src/core/storage.js"></script>
+<script src="src/domain/missions.js"></script>
+<script src="src/domain/energy.js"></script>
+<script src="src/domain/recovery.js"></script>
+<script src="src/domain/momentum.js"></script>
+<script src="src/domain/log.js"></script>
+<script src="src/domain/nextAction.js"></script>
+<script src="src/domain/weekly.js"></script>
+<script src="src/domain/ielts.js"></script>
+<script src="src/domain/programming.js"></script>
+<script src="src/domain/jobs.js"></script>
+<script src="src/domain/review.js"></script>
+<script src="src/domain/balance.js"></script>
+<script src="src/domain/backlog.js"></script>
+<script src="src/ui/render.js"></script>
+<script src="src/main.js"></script>
+</body>
+</html>
