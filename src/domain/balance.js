@@ -1,14 +1,14 @@
 // ═══════════════════════════════════════════════════════
 // LIFE BALANCE — protects rest, family, hobbies from being optimized away
 // ═══════════════════════════════════════════════════════
-function lifeBalance(missions, weekLogs) {
+function lifeBalance(missions, weekStart, weekLogs, timeEntries, jobs) {
   const out = {};
   Object.entries(BALANCE_CATEGORIES).forEach(([cat, ids]) => {
     let ratioSum = 0, count = 0;
     ids.forEach((id) => {
       const m = missionById(missions, id);
       if (!m) return;
-      const wp = weeklyProgress(m, weekLogs);
+      const wp = weeklyProgress(m, weekStart, weekLogs, timeEntries, jobs);
       ratioSum += wp.target > 0 ? wp.completed / wp.target : 0;
       count++;
     });

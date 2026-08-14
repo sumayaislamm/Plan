@@ -6,9 +6,9 @@
 const RECOVERY_ESSENTIAL_IDS = ['prayer', 'family', 'ielts', 'programming', 'quran', 'sleep'];
 
 function shouldSuggestRecovery(log) {
-  if (!log) return false;
+  if (!log || log.recoveryActive) return false;
   if (log.energyScore != null && log.energyScore <= 3) return true;
-  if (log.energy === 'low' && log.recoveryReason) return true;
+  if (log.energy === 'low') return true;
   return false;
 }
 

@@ -65,9 +65,27 @@ const BALANCE_CATEGORIES = {
   Rest: ['rest', 'sleep'],
 };
 
+function normalizeMissions(raw) {
+  const defaults = defaultMissions();
+  if (!Array.isArray(raw) || !raw.length) return defaults;
+  const byId = {}; defaults.forEach((d) => byId[d.id] = d);
+  return raw.filter((m) => m && m.id && byId[m.id]).map((m) => {
+    const d = byId[m.id];
+    const lv = (n, fallback) => (typeof n === 'number' && isFinite(n) && n >= 0) ? n : fallback;
+    return {
+      ...d,
+      levels: {
+        minimum: lv(m.levels?.minimum, d.levels.minimum),
+        standard: lv(m.levels?.standard, d.levels.standard),
+        stretch: lv(m.levels?.stretch, d.levels.stretch),
+      },
+    };
+  });
+}
+
 async function loadMissions() {
   const m = await storeGet('missions', null);
-  if (m) return m;
+  if (m) return normalizeMissions(m);
   const def = defaultMissions();
   await storeSet('missions', def);
   return def;

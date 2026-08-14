@@ -1,12 +1,12 @@
 // ═══════════════════════════════════════════════════════
 // PROGRAMMING — output/project based, not just hours logged
 // ═══════════════════════════════════════════════════════
-async function loadProjects() { return await storeGet('projects', []); }
+async function loadProjects() { return normalizeProjects(await storeGet('projects', [])); }
 async function saveProjects(p) { await storeSet('projects', p); }
 
 function newProject(name) { return { id: 'proj_' + Date.now(), name, status: 'active', features: [] }; }
 function newFeature(name) { return { id: 'feat_' + Date.now(), name, tasks: [] }; }
-function newTask(name) { return { id: 'task_' + Date.now(), name, status: 'todo', subtasks: [], createdAt: getDateKey(new Date()) }; }
+function newTask(name) { return { id: 'task_' + Date.now(), name, status: 'todo', subtasks: [], createdAt: getDateKey(new Date()), completedAt: null }; }
 function newSubtask(name) { return { id: 'sub_' + Date.now(), name, done: false }; }
 
 function projectProgress(project) {
@@ -22,4 +22,27 @@ function completedTasksCount(projects) {
   let n = 0;
   projects.forEach((p) => p.features.forEach((f) => f.tasks.forEach((t) => { if (t.status === 'done') n++; })));
   return n;
+}
+// Task OUTPUT completed within a week — a separate metric from Programming FOCUSED TIME.
+// Never invents minutes; toggling a task on/off only ever affects this count once, via completedAt.
+function tasksCompletedInRange(projects, startDate, endDateExclusive) {
+  let n = 0;
+  projects.forEach((p) => p.features.forEach((f) => f.tasks.forEach((t) => {
+    if (t.status === 'done' && t.completedAt && t.completedAt >= startDate && t.completedAt < endDateExclusive) n++;
+  })));
+  return n;
+}
+function normalizeProjects(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((p) => p && p.id && p.name).map((p) => ({
+    id: p.id, name: p.name, status: p.status === 'archived' ? 'archived' : 'active',
+    features: Array.isArray(p.features) ? p.features.filter((f) => f && f.id).map((f) => ({
+      id: f.id, name: f.name || '',
+      tasks: Array.isArray(f.tasks) ? f.tasks.filter((t) => t && t.id).map((t) => ({
+        id: t.id, name: t.name || '', status: t.status === 'done' ? 'done' : 'todo',
+        createdAt: t.createdAt || null, completedAt: t.completedAt || null,
+        subtasks: Array.isArray(t.subtasks) ? t.subtasks.filter((s) => s && s.id) : [],
+      })) : [],
+    })) : [],
+  }));
 }
