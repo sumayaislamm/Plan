@@ -249,14 +249,14 @@ async function completeFocus() {
   await refreshCore(); await renderCurrentView();
 }
 
-// ── ACTUAL TIME LOGGING (manual) ────────────────────────
+// ── WORK LOG (manual entries into the canonical timeEntries store) ─────
 function openAddTime() {
   if (APP.viewingKey !== APP.todayKey) { showToast('Historical days are read-only'); return; }
   const opts = TIME_ENTRY_CATEGORIES.map((c) => `<option value="${c}">${esc(missionLabelById(c))}</option>`).join('');
-  openModal(`<div class="modal-handle"></div><div class="modal-title">Add Time</div>
-    <div class="field"><label>Activity</label><select id="at-cat">${opts}</select></div>
-    <div class="field"><label>Minutes</label><input type="number" id="at-min" min="1" max="${TIME_ENTRY_MAX_MINUTES}" placeholder="45"/></div>
-    <div class="field"><label>Note (optional)</label><input type="text" id="at-note" placeholder="Writing, Reading..."/></div>
+  openModal(`<div class="modal-handle"></div><div class="modal-title">Log Work</div>
+    <div class="field"><label>What did you do?</label><input type="text" id="at-note" placeholder="e.g. Writing Task 2 practice"/></div>
+    <div class="field"><label>Category</label><select id="at-cat">${opts}</select></div>
+    <div class="field"><label>Time spent (minutes)</label><input type="number" id="at-min" min="1" max="${TIME_ENTRY_MAX_MINUTES}" placeholder="45"/></div>
     <div id="at-err" style="font-size:0.65rem;color:var(--red);display:none;margin-bottom:8px"></div>
     <div class="modal-btns"><button class="btn block" onclick="closeModal()">Cancel</button>
     <button class="btn primary block" onclick="saveAddTime()">Save</button></div>`);
@@ -265,7 +265,7 @@ async function saveAddTime() {
   await withSaveLock(async () => {
     const category = document.getElementById('at-cat').value;
     const minutesRaw = document.getElementById('at-min').value;
-    const note = document.getElementById('at-note').value;
+    const note = document.getElementById('at-note').value.trim();
     const { list, entry, error } = addTimeEntry(APP.timeEntries, { date: APP.viewingKey, category, minutes: minutesRaw, source: 'manual', note });
     if (error) { const e = document.getElementById('at-err'); e.textContent = error === 'Invalid duration' ? 'Enter a duration greater than 0 (and under 12h).' : error; e.style.display = 'block'; return; }
     APP.timeEntries = list;
@@ -274,32 +274,14 @@ async function saveAddTime() {
     showToast(`+${entry.minutes}m logged`);
   });
 }
-function openViewTime() {
-  const grouped = breakdownForDate(APP.timeEntries, APP.viewingKey);
-  const ids = Object.keys(grouped);
-  let html = `<div class="modal-handle"></div><div class="modal-title">Today's Time</div>`;
-  if (!ids.length) html += `<div class="empty">Nothing logged yet.</div>`;
-  ids.forEach((missionId) => {
-    html += `<div style="font-size:0.68rem;color:var(--gold);margin:10px 0 5px;text-transform:uppercase;letter-spacing:0.08em">${esc(missionLabelById(missionId))}</div>`;
-    grouped[missionId].forEach((e) => {
-      const editable = APP.viewingKey === APP.todayKey;
-      html += `<div class="time-entry-row">
-        <div><div class="te-main">${fmtMin(e.minutes)}${e.note ? ' — ' + esc(e.note) : ''}</div>
-        <div class="te-meta te-source-${e.source}">${sourceLabel(e.source)}</div></div>
-        ${editable ? `<div class="te-actions"><button onclick="editTimeEntry('${e.id}')">✎</button><button onclick="deleteTimeEntryPrompt('${e.id}')">✕</button></div>` : ''}
-      </div>`;
-    });
-  });
-  openModal(html);
-}
 function editTimeEntry(id) {
   const e = APP.timeEntries.find((x) => x.id === id); if (!e) return;
   APP.editingEntryId = id;
   openModal(`<div class="modal-handle"></div><div class="modal-title">Edit Entry</div>
+    <div class="field"><label>What did you do?</label><input type="text" id="et-note" value="${escAttr(e.note || '')}"/></div>
     <div class="field"><label>Minutes</label><input type="number" id="et-min" min="1" max="${TIME_ENTRY_MAX_MINUTES}" value="${e.minutes}"/></div>
-    <div class="field"><label>Note</label><input type="text" id="et-note" value="${escAttr(e.note || '')}"/></div>
     <div id="et-err" style="font-size:0.65rem;color:var(--red);display:none;margin-bottom:8px"></div>
-    <div class="modal-btns"><button class="btn block" onclick="openViewTime()">Cancel</button>
+    <div class="modal-btns"><button class="btn block" onclick="closeModal()">Cancel</button>
     <button class="btn primary block" onclick="saveEditTimeEntry()">Save</button></div>`);
 }
 async function saveEditTimeEntry() {
@@ -310,24 +292,24 @@ async function saveEditTimeEntry() {
     if (error) { const e = document.getElementById('et-err'); e.textContent = 'Enter a duration greater than 0 (and under 12h).'; e.style.display = 'block'; return; }
     APP.timeEntries = list;
     await saveAllTimeEntries(APP.timeEntries);
-    await refreshCore();
-    if (APP.currentView === 'today') await renderCurrentView();
-    openViewTime();
+    closeModal();
+    await refreshCore();       // recomputes mission actual time, weekly totals, and rebuilds momentum
+    await renderCurrentView(); // Today's Work Log re-renders inline with the updated entry — no separate view to reopen
   });
 }
 function deleteTimeEntryPrompt(id) {
   const e = APP.timeEntries.find((x) => x.id === id); if (!e) return;
   openModal(`<div class="modal-handle"></div><div class="modal-title">Delete this entry?</div>
-    <div style="font-size:0.75rem;color:var(--text2);margin-bottom:14px">${fmtMin(e.minutes)}${e.note ? ' — ' + esc(e.note) : ''} (${sourceLabel(e.source)}) will be removed. Other entries are unaffected.</div>
-    <div class="modal-btns"><button class="btn block" onclick="openViewTime()">Cancel</button>
+    <div style="font-size:0.75rem;color:var(--text2);margin-bottom:14px">${esc(e.note || missionLabelById(e.category))} — ${fmtMin(e.minutes)} (${sourceLabel(e.source)}) will be removed. Other entries are unaffected.</div>
+    <div class="modal-btns"><button class="btn block" onclick="closeModal()">Cancel</button>
     <button class="btn primary block" style="background:var(--red)" onclick="confirmDeleteTimeEntry('${id}')">Delete</button></div>`);
 }
 async function confirmDeleteTimeEntry(id) {
   APP.timeEntries = deleteTimeEntry(APP.timeEntries, id);
   await saveAllTimeEntries(APP.timeEntries);
+  closeModal();
   await refreshCore();
-  if (APP.currentView === 'today') await renderCurrentView();
-  openViewTime();
+  await renderCurrentView();
   showToast('Entry deleted');
 }
 

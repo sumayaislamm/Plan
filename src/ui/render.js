@@ -71,8 +71,8 @@ function renderToday(S) {
     </div>`;
   }
 
-  html += `<div class="sec-hdr"><span class="sec-title">Actual Time Today</span><span class="sec-link" onclick="openAddTime()">+ Add Time</span></div>`;
-  html += renderTodayTimeSummary(timeEntries, log.date, S.isPast);
+  html += `<div class="sec-hdr"><span class="sec-title">Today's Work Log</span>${S.isPast ? '' : '<span class="sec-link" onclick="openAddTime()">+ Log Work</span>'}</div>`;
+  html += renderWorkLog(timeEntries, log.date, S.isPast);
 
   html += `<div class="sec-hdr"><span class="sec-title">Momentum</span></div>`;
   html += renderMomentumCard(momentum);
@@ -93,20 +93,39 @@ function renderToday(S) {
   return html;
 }
 
-function renderTodayTimeSummary(timeEntries, date, readonly) {
-  const grouped = breakdownForDate(timeEntries || [], date);
-  const ids = Object.keys(grouped);
-  if (!ids.length) return `<div class="card" style="text-align:center;color:var(--text3);font-size:0.72rem;font-style:italic">No time logged ${readonly ? 'that day' : 'yet today'}.</div>`;
-  let html = '<div class="card">';
-  ids.forEach((missionId) => {
-    const entries = grouped[missionId];
-    const total = entries.reduce((s, e) => s + e.minutes, 0);
-    html += `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)">
-      <span style="font-size:0.75rem">${MISSION_ICON[missionId] || ''} ${esc(missionLabelById(missionId))}</span>
-      <span style="font-size:0.78rem;color:var(--gold);font-weight:600">${fmtMin(total)}</span>
+// "Today's Work Log" — individual entries shown inline (grouped by category,
+// each entry keeps its own description/time/source), not hidden behind a
+// modal. This is a rendering change only — reads the same canonical
+// timeEntries list as everything else; no second data source.
+function renderWorkLog(timeEntries, date, readonly) {
+  const entries = entriesForDate(timeEntries, date).slice().sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
+  if (!entries.length) return `<div class="card" style="text-align:center;color:var(--text3);font-size:0.72rem;font-style:italic">No work logged ${readonly ? 'that day' : 'yet today'}.</div>`;
+
+  const total = entries.reduce((s, e) => s + e.minutes, 0);
+  const grouped = {};
+  entries.forEach((e) => { (grouped[e.category] ||= []).push(e); });
+
+  let html = `<div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid var(--border)">
+      <span style="font-size:0.7rem;color:var(--text2)">Total logged ${readonly ? 'that day' : 'today'}</span>
+      <span style="font-size:0.95rem;color:var(--gold);font-weight:700">${fmtMin(total)}</span>
     </div>`;
+
+  Object.keys(grouped).forEach((cat) => {
+    const catEntries = grouped[cat];
+    const catTotal = catEntries.reduce((s, e) => s + e.minutes, 0);
+    html += `<div style="font-size:0.6rem;color:var(--gold);text-transform:uppercase;letter-spacing:0.07em;margin:9px 0 5px;display:flex;justify-content:space-between">
+      <span>${MISSION_ICON[cat] || ''} ${esc(missionLabelById(cat))}</span><span>${fmtMin(catTotal)}</span>
+    </div>`;
+    catEntries.forEach((e) => {
+      html += `<div class="time-entry-row">
+        <div><div class="te-main">${esc(e.note || missionLabelById(cat))}</div>
+        <div class="te-meta te-source-${e.source}">${fmtMin(e.minutes)} · ${sourceLabel(e.source)}</div></div>
+        ${!readonly ? `<div class="te-actions"><button onclick="editTimeEntry('${e.id}')">✎</button><button onclick="deleteTimeEntryPrompt('${e.id}')">✕</button></div>` : ''}
+      </div>`;
+    });
   });
-  html += `</div><div class="sec-link" style="text-align:center;display:block;margin:-4px 0 10px" onclick="openViewTime()">View entries →</div>`;
+  html += `</div>`;
   return html;
 }
 function missionLabelById(id) {
