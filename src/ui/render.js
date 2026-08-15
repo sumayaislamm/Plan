@@ -361,7 +361,77 @@ function renderWeekly(S) {
       </div>`;
     });
   });
+
+  html += renderTimeDistributionSection(S);
   return html;
+}
+
+// ── TIME DISTRIBUTION ANALYTICS (derived view only — reads S.timeEntries) ─
+function renderTimeDistributionSection(S) {
+  const { timeEntries, missions, viewingKey, weekStart, analyticsPeriod } = S;
+  const period = analyticsPeriod || 'week';
+  const [start, end] = rangeForPeriod(period, viewingKey, weekStart);
+  const distribution = distributionForRange(timeEntries, start, end);
+  const entries = sortedDistributionEntries(distribution);
+  const total = distributionTotal(distribution);
+
+  let html = `<div class="sec-hdr"><span class="sec-title">Where did my time go?</span></div>`;
+  html += `<div class="pill-row" style="margin-bottom:9px">
+    <button class="pill${period==='today'?' active':''}" onclick="setAnalyticsPeriod('today')">Today</button>
+    <button class="pill${period==='week'?' active':''}" onclick="setAnalyticsPeriod('week')">This Week</button>
+    <button class="pill${period==='month'?' active':''}" onclick="setAnalyticsPeriod('month')">This Month</button>
+  </div>`;
+
+  if (!entries.length) {
+    html += `<div class="card" style="text-align:center;color:var(--text3);font-size:0.75rem;font-style:italic">No actual time logged ${period === 'today' ? 'today' : period === 'month' ? 'this month' : 'this week'} yet. Log some work or complete a Focus session to see it here.</div>`;
+    return html;
+  }
+
+  const max = entries[0][1];
+  html += `<div class="card">`;
+  entries.forEach(([cat, mins]) => {
+    const pct = max > 0 ? Math.round((mins / max) * 100) : 0;
+    html += `<div style="margin-bottom:9px">
+      <div style="display:flex;justify-content:space-between;font-size:0.72rem;margin-bottom:3px">
+        <span>${MISSION_ICON[cat] || ''} ${esc(missionLabelById(cat))}</span>
+        <span style="color:var(--gold);font-weight:600">${dur$(mins)}</span>
+      </div>
+      <div class="mc-track"><div class="mc-fill" style="width:${pct}%"></div></div>
+    </div>`;
+  });
+  html += `<div class="insight-note">${esc(distributionInsightText(entries, total, period))}</div>`;
+  html += `</div>`;
+
+  // 7-day trend — only rendered alongside the week/month periods, keeps Today uncluttered.
+  if (period !== 'today') {
+    const trendStart = period === 'month' ? start : weekStart;
+    const trendEnd = period === 'month' ? end : addDays(weekStart, 7);
+    const days = dailyTotalsForRange(timeEntries, trendStart, trendEnd);
+    if (days.length && days.length <= 31) {
+      const trendMax = Math.max(1, ...days.map((d) => d.minutes));
+      const todayKeyForTrend = viewingKey; // only meaningfully highlights "today" when viewing the current day
+      html += `<div class="sec-hdr" style="margin-top:16px"><span class="sec-title" style="font-size:0.85rem">7-Day Time Trend</span></div>`;
+      html += `<div class="card"><div class="trend-row">`;
+      days.slice(-7).forEach((d) => {
+        const h = Math.max(2, Math.round((d.minutes / trendMax) * 60));
+        const dow = new Date(d.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short' })[0];
+        html += `<div class="trend-col">
+          <div class="trend-bar${d.date === todayKeyForTrend ? ' today' : ''}" style="height:${h}px" title="${dur$(d.minutes) || '0m'}"></div>
+          <div class="trend-lbl">${dow}</div>
+        </div>`;
+      });
+      html += `</div></div>`;
+    }
+  }
+
+  return html;
+}
+function distributionInsightText(sortedEntries, total, period) {
+  const periodLabel = period === 'today' ? 'today' : period === 'month' ? 'this month' : 'this week';
+  if (!sortedEntries.length) return '';
+  if (sortedEntries.length === 1) return `You spent ${dur$(total)} ${periodLabel}, all on ${missionLabelById(sortedEntries[0][0])}.`;
+  const [topCat] = sortedEntries[0];
+  return `Most of your logged time ${periodLabel} went to ${missionLabelById(topCat)} — ${dur$(total)} logged in total.`;
 }
 
 // ── HISTORY ────────────────────────────────────────────
@@ -378,11 +448,94 @@ function renderHistoryList(keys, logsById, missions, timeEntries) {
     const log = logsById[k];
     const score = Math.round(dailyCompletionScore(log, missions, timeEntries));
     const prayerDone = Object.values(log.prayers).filter(Boolean).length;
-    return `<div class="list-item" onclick="viewHistoryDay('${k}')">
+    return `<div class="list-item" onclick="openHistoryDetail('${k}')">
       <div class="li-top"><span class="li-title">${fmtKey(k)}</span><span style="color:var(--gold);font-weight:700">${score}%</span></div>
       <div class="li-sub">🕌 ${prayerDone}/5 prayers${log.recoveryActive ? ' · 🌊 recovery day' : ''}${log.reflection?.accomplished ? ' · "'+esc(log.reflection.accomplished.slice(0,40))+'"' : ''}</div>
     </div>`;
   }).join('');
+}
+
+// ── HISTORY DETAIL (full daily retrospective for one date) ─────────────
+// Read-only always — this view never shows edit/delete controls, matching
+// History's existing read-only rule. Reuses renderPrayerStrip/renderWorkLog
+// exactly as Today does, so the same entries/prayer state render identically
+// in both places (single source of truth, no history-specific copies).
+function renderHistoryDetail(D) {
+  const { date, log, prayerTimes, timeEntries, missions, momentumScore, taskActivity, jobActivity, hasActivity, canGoNext } = D;
+
+  let html = `<button class="btn ghost block" style="margin-bottom:11px" onclick="closeHistoryDetail()">← Back to History</button>`;
+  html += `<div class="hero"><div class="hero-eyebrow">${fmtKeyLong(date)}</div><h1 class="hero-title">Day <em>Retrospective</em></h1></div>`;
+  html += `<div style="display:flex;gap:8px;margin-bottom:14px">
+    <button class="btn block" onclick="historyPrevDay()">← Previous day</button>
+    <button class="btn block" onclick="historyNextDay()" ${canGoNext ? '' : 'disabled'}>Next day →</button>
+  </div>`;
+
+  if (!hasActivity) {
+    html += `<div class="empty">No activity recorded for this day.</div>`;
+    html += `<div class="sec-link" style="text-align:center;display:block;margin-top:10px" onclick="viewHistoryDay('${date}')">Open in Today layout →</div>`;
+    return html;
+  }
+
+  // Day summary
+  const score = Math.round(dailyCompletionScore(log, missions, timeEntries));
+  html += `<div class="stats-g">
+    <div class="sc"><div class="sc-v">${score}%</div><div class="sc-l">Day score</div></div>
+    <div class="sc"><div class="sc-v">${momentumScore ?? '—'}${momentumScore != null ? '%' : ''}</div><div class="sc-l">Momentum that day</div></div>
+  </div>`;
+  if (log.energy || log.recoveryActive) {
+    html += `<div class="card" style="font-size:0.75rem;color:var(--text2)">${log.recoveryActive ? '🌊 Recovery Mode day' : `Energy: ${esc(energyLabel(log.energy))}`}${log.energyScore != null ? ` (${log.energyScore}/10)` : ''}</div>`;
+  }
+
+  html += `<div class="sec-hdr"><span class="sec-title">🕌 Prayers</span></div>`;
+  html += renderPrayerStrip(log, prayerTimes, true);
+
+  html += `<div class="sec-hdr"><span class="sec-title">Work Log</span></div>`;
+  html += renderWorkLog(timeEntries, date, true);
+
+  // Compact mission recap — only missions actually touched that day, using
+  // the same progressLine()/actual-time derivation as everywhere else.
+  const missionRows = missions.filter((m) => {
+    if (m.id === 'prayer' || m.id === 'sleep') return false;
+    if (m.type === 'time') return missionActualMinutes(timeEntries, m.id, date) > 0;
+    if (m.id === 'job-apps') return jobActivity.length > 0;
+    return (log.progress[m.id] || 0) > 0;
+  });
+  if (missionRows.length) {
+    html += `<div class="sec-hdr"><span class="sec-title">Missions</span></div><div class="card">`;
+    missionRows.forEach((m) => {
+      const line = m.type === 'time' ? progressLine(m, missionActualMinutes(timeEntries, m.id, date))
+        : m.id === 'job-apps' ? `${jobActivity.length} application${jobActivity.length === 1 ? '' : 's'}`
+        : `${log.progress[m.id] || 0} logged`;
+      html += `<div style="display:flex;justify-content:space-between;font-size:0.75rem;padding:5px 0"><span>${MISSION_ICON[m.id]||''} ${esc(m.name)}</span><span style="color:var(--text2)">${esc(line)}</span></div>`;
+    });
+    html += `</div>`;
+  }
+
+  if (taskActivity.length) {
+    html += `<div class="sec-hdr"><span class="sec-title">Project / Task Activity</span></div><div class="card">`;
+    taskActivity.forEach((t) => {
+      html += `<div style="font-size:0.75rem;padding:5px 0;border-bottom:1px solid var(--border)">✓ ${esc(t.taskName)} <span style="color:var(--text3);font-size:0.65rem">— ${esc(t.projectName)} / ${esc(t.featureName)}</span></div>`;
+    });
+    html += `</div>`;
+  }
+
+  if (jobActivity.length) {
+    html += `<div class="sec-hdr"><span class="sec-title">Jobs</span></div><div class="card">`;
+    jobActivity.forEach((j) => {
+      html += `<div style="font-size:0.75rem;padding:5px 0;border-bottom:1px solid var(--border)">${esc(j.company)} — ${esc(j.position)} <span class="status-chip status-${j.status}" style="margin-left:6px">${j.status}</span></div>`;
+    });
+    html += `</div>`;
+  }
+
+  if (log.reflection && (log.reflection.accomplished || log.reflection.blocker || log.reflection.tomorrowFocus)) {
+    html += `<div class="sec-hdr"><span class="sec-title">Reflection</span></div><div class="card">`;
+    if (log.reflection.accomplished) html += `<div style="font-size:0.72rem;margin-bottom:8px"><span style="color:var(--gold)">Accomplished:</span> ${esc(log.reflection.accomplished)}</div>`;
+    if (log.reflection.blocker) html += `<div style="font-size:0.72rem;margin-bottom:8px"><span style="color:var(--gold)">Blocked by:</span> ${esc(log.reflection.blocker)}</div>`;
+    if (log.reflection.tomorrowFocus) html += `<div style="font-size:0.72rem"><span style="color:var(--gold)">Next focus:</span> ${esc(log.reflection.tomorrowFocus)}</div>`;
+    html += `</div>`;
+  }
+
+  return html;
 }
 
 // ── MONTHLY REVIEW ─────────────────────────────────────

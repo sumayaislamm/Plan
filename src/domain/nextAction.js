@@ -6,16 +6,28 @@ function nextBestAction({ missions, log, energy, recoveryActive, prayerTimes, we
   const now = new Date();
   const nowA = a$(now.getHours(), now.getMinutes());
 
-  // 1. Upcoming/unchecked prayer within the next 15 minutes, or already-due and unchecked → always wins.
+  // 1. Prayer recommendation — only ever suggest a prayer whose window is
+  // still "live": either imminent/current (within 15 min before its time,
+  // up until the NEXT prayer's time arrives) or, for Isha, until end of day.
+  // A prayer whose window has already closed is "missed", not recommended —
+  // this is what previously let a long-past unchecked Dhuhr get suggested
+  // at 9:49 PM, because the old check (`nowA >= pa - 15`) had no upper bound
+  // and stayed true for the rest of the day.
   const prayerOrder = ['fajr', 'dhuhr', 'asr', 'maghrib', 'isha'];
   const prayerNames = { fajr: 'Fajr', dhuhr: 'Dhuhr', asr: 'Asr', maghrib: 'Maghrib', isha: 'Isha' };
   if (prayerTimes) {
-    for (const p of prayerOrder) {
+    for (let i = 0; i < prayerOrder.length; i++) {
+      const p = prayerOrder[i];
       if (log.prayers[p]) continue;
       const pt = prayerTimes[p];
       if (!pt || typeof pt.h !== 'number' || typeof pt.m !== 'number') continue; // malformed API data — skip, don't crash
       const pa = a$(pt.h, pt.m);
-      if (nowA >= pa - 15) {
+
+      const nextP = prayerOrder[i + 1];
+      const nextPt = nextP ? prayerTimes[nextP] : null;
+      const windowEnd = (nextPt && typeof nextPt.h === 'number' && typeof nextPt.m === 'number') ? a$(nextPt.h, nextPt.m) : 1440; // Isha's window runs to end of day
+
+      if (nowA >= pa - 15 && nowA < windowEnd) {
         return { kind: 'prayer', missionId: 'prayer', name: prayerNames[p] + ' Prayer', meta: 'Anchor · a few minutes', category: 'foundation' };
       }
     }

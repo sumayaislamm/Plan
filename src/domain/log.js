@@ -65,3 +65,27 @@ async function allLogKeys() {
   const remote = (await remoteKeysWithPrefix('log_')).map((k) => k.slice(4));
   return [...new Set([...local, ...remote])].sort((a, b) => b.localeCompare(a));
 }
+
+// A day is "discoverable" in History if ANY canonical source has data for it
+// — not just a daily log. timeEntries/jobs/projects/ielts are each stored as
+// one whole-array blob that already syncs in full via storeGet, so scanning
+// the already-loaded in-memory arrays here needs no extra network calls.
+function mergeActivityDates(logKeys, timeEntries, jobs, projects, ielts) {
+  const set = new Set(logKeys);
+  (timeEntries || []).forEach((e) => { if (e && typeof e.date === 'string') set.add(e.date); });
+  (jobs || []).forEach((j) => { if (j && j.dateApplied) set.add(j.dateApplied); });
+  (projects || []).forEach((p) => (p.features || []).forEach((f) => (f.tasks || []).forEach((t) => { if (t.completedAt) set.add(t.completedAt); })));
+  (ielts?.tasks || []).forEach((t) => { if (t) { if (t.date) set.add(t.date); if (t.completedAt) set.add(t.completedAt); } });
+  return [...set].sort((a, b) => b.localeCompare(a));
+}
+
+// Any recorded activity at all for one date — used for History's empty state.
+function dayHasActivity(log, timeEntries, date, projects, jobs) {
+  if (log.prayers && Object.values(log.prayers).some(Boolean)) return true;
+  if (entriesForDate(timeEntries, date).length) return true;
+  if (log.progress && Object.values(log.progress).some((v) => v > 0)) return true;
+  if (log.reflection && (log.reflection.accomplished || log.reflection.blocker || log.reflection.tomorrowFocus)) return true;
+  if (tasksCompletedOnDate(projects, date).length) return true;
+  if (jobsAppliedOnDate(jobs, date).length) return true;
+  return false;
+}

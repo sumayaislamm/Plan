@@ -136,6 +136,14 @@ main{padding-top:64px;padding-bottom:66px;max-width:520px;margin:0 auto;padding-
 .te-source-focus{color:var(--purple)}
 .te-source-manual{color:var(--blue)}
 
+/* ── TIME DISTRIBUTION ANALYTICS ─────────────────────── */
+.trend-row{display:flex;align-items:flex-end;gap:5px;height:70px;margin:4px 0 6px}
+.trend-col{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%}
+.trend-bar{width:100%;max-width:22px;background:var(--gold);border-radius:4px 4px 2px 2px;min-height:2px;transition:height 0.4s ease;opacity:0.85}
+.trend-bar.today{opacity:1;box-shadow:0 0 0 1px var(--gold-glow)}
+.trend-lbl{font-size:0.52rem;color:var(--text3);margin-top:5px}
+.insight-note{font-size:0.68rem;color:var(--text2);font-style:italic;text-align:center;padding:4px 6px 0}
+
 /* ── PROGRESS BARS / STATS ───────────────────── */
 .balance-row{display:flex;align-items:center;gap:8px;margin-bottom:8px}
 .balance-lbl{font-size:0.66rem;color:var(--text2);min-width:78px}

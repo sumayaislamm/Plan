@@ -20,10 +20,12 @@ async function saveIelts(d) { await storeSet('ielts', d); }
 
 function addIeltsTask(data, { type, skill, notes, date }) {
   if (!IELTS_TASK_TYPES.includes(type) || !IELTS_SKILLS.includes(skill)) return false;
-  data.tasks.unshift({ id: 'it_' + Date.now(), type, skill, notes: sanitizeNote(notes), date: date || getDateKey(new Date()), status: 'planned' });
+  data.tasks.unshift({ id: 'it_' + Date.now(), type, skill, notes: sanitizeNote(notes), date: date || getDateKey(new Date()), status: 'planned', completedAt: null });
   return true;
 }
 function completeIeltsTask(data, taskId) { const t = data.tasks.find((x) => x.id === taskId); if (t) t.status = 'done'; }
+// Tasks completed on an exact date — used by History's daily retrospective. Never counted as time.
+function ieltsTasksCompletedOnDate(data, date) { return (data.tasks || []).filter((t) => t.completedAt === date); }
 // Returns false (and leaves data untouched) on an invalid score — caller must surface the rejection.
 function recordScore(data, skill, score, testLabel) {
   if (!IELTS_SKILLS.includes(skill)) return false;

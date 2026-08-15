@@ -32,6 +32,14 @@ function tasksCompletedInRange(projects, startDate, endDateExclusive) {
   })));
   return n;
 }
+// Same idea but returns the actual completed items (not just a count) — used by History's daily retrospective.
+function tasksCompletedOnDate(projects, date) {
+  const out = [];
+  (projects || []).forEach((p) => (p.features || []).forEach((f) => (f.tasks || []).forEach((t) => {
+    if (t.status === 'done' && t.completedAt === date) out.push({ projectName: p.name, featureName: f.name, taskName: t.name });
+  })));
+  return out;
+}
 function normalizeProjects(raw) {
   if (!Array.isArray(raw)) return [];
   return raw.filter((p) => p && p.id && p.name).map((p) => ({

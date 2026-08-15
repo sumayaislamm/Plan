@@ -19,6 +19,8 @@ function jobsThisWeek(jobs, weekStart) {
   const weekEnd = addDays(weekStart, 7);
   return jobs.filter((j) => j.dateApplied && j.dateApplied >= weekStart && j.dateApplied < weekEnd && isApplicationStatus(j.status));
 }
+// Applications recorded on one exact date — used by History's daily retrospective.
+function jobsAppliedOnDate(jobs, date) { return (jobs || []).filter((j) => j.dateApplied === date && isApplicationStatus(j.status)); }
 
 // http(s) only. Returns null (reject, don't silently strip) for javascript:/data:/vbscript:/anything else.
 function validateUrl(url) {

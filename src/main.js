@@ -10,7 +10,7 @@ const APP = {
   focusAction: null, focusTimer: null, focusTargetSeconds: 0, focusStartedAt: 0,
   focusPausedAccumMs: 0, focusPausedAt: null,
   currentProjectId: null, reviewYearMonth: null,
-  editingEntryId: null, saving: false,
+  editingEntryId: null, saving: false, analyticsPeriod: 'week', historyDetailDate: null,
 };
 
 let toastTimer;
@@ -59,12 +59,16 @@ function currentState() {
     timeEntries: APP.timeEntries, jobs: APP.jobs,
   }) : null;
   APP.lastNextAction = isToday ? nextAction : null;
+  // Momentum AS IT WAS on the day being viewed, not always "today's" latest value —
+  // the Today page is reused for read-only historical viewing, so this must track viewingKey.
+  const momentumScore = isToday ? currentMomentum(APP.momentumSeries) : (momentumForDate(APP.momentumSeries, APP.viewingKey) ?? currentMomentum(APP.momentumSeries));
   return {
     missions: APP.missions, log: APP.log, prayerTimes: APP.prayerTimes,
-    momentum: { score: currentMomentum(APP.momentumSeries), trend: momentumTrend(APP.momentumSeries) },
+    momentum: { score: momentumScore, trend: isToday ? momentumTrend(APP.momentumSeries) : 'steady' },
     nextAction: isToday ? nextAction : null, weeklyRemaining, balance: APP.balance,
     viewingKey: APP.viewingKey, isPast: APP.viewingKey < APP.todayKey,
     weekProgress: APP.weekProgress, weekStart: APP.weekStart, timeEntries: APP.timeEntries,
+    analyticsPeriod: APP.analyticsPeriod,
   };
 }
 
@@ -79,6 +83,34 @@ async function switchView(view, btn) {
   await renderCurrentView();
 }
 function switchViewByName(view) { switchView(view, document.querySelector(`.tabbtn[data-view="${view}"]`)); }
+
+// ── HISTORY DETAIL — gathers exactly one day's data (2 async calls: the log
+// and that day's prayer times) and reuses the already-loaded in-memory
+// timeEntries/projects/jobs/ielts/momentum arrays — no bulk history scan.
+async function buildHistoryDetailHtml(date) {
+  const log = await loadLog(date);
+  const prayerTimesForDate = await fetchPrayerTimes(date);
+  const taskActivity = tasksCompletedOnDate(APP.projects, date);
+  const jobActivity = jobsAppliedOnDate(APP.jobs, date);
+  const momentumScore = momentumForDate(APP.momentumSeries, date);
+  const hasActivity = dayHasActivity(log, APP.timeEntries, date, APP.projects, APP.jobs);
+  const canGoNext = addDays(date, 1) < APP.todayKey;
+  return renderHistoryDetail({
+    date, log, prayerTimes: prayerTimesForDate, timeEntries: APP.timeEntries, missions: APP.missions,
+    momentumScore, taskActivity, jobActivity, hasActivity, canGoNext,
+  });
+}
+function openHistoryDetail(date) { APP.historyDetailDate = date; renderCurrentView(); }
+function closeHistoryDetail() { APP.historyDetailDate = null; renderCurrentView(); }
+function historyPrevDay() { openHistoryDetail(addDays(APP.historyDetailDate, -1)); }
+function historyNextDay() { const n = addDays(APP.historyDetailDate, 1); if (n < APP.todayKey) openHistoryDetail(n); }
+
+// Pure display-filter change — no refetch, just re-renders Weekly with the
+// already-loaded APP.timeEntries filtered to a different date range.
+function setAnalyticsPeriod(period) {
+  APP.analyticsPeriod = period;
+  if (APP.currentView === 'weekly') renderCurrentView();
+}
 
 async function renderCurrentView() {
   const view = APP.currentView;
@@ -98,10 +130,14 @@ async function renderCurrentView() {
   } else if (view === 'weekly') {
     document.getElementById('view-weekly').innerHTML = renderWeekly(currentState());
   } else if (view === 'history') {
-    document.getElementById('view-history').innerHTML = renderHistory(currentState());
-    const keys = await allLogKeys();
-    const logsById = {}; for (const k of keys) logsById[k] = await loadLog(k);
-    document.getElementById('hist-list').innerHTML = renderHistoryList(keys, logsById, APP.missions, APP.timeEntries);
+    if (APP.historyDetailDate) {
+      document.getElementById('view-history').innerHTML = await buildHistoryDetailHtml(APP.historyDetailDate);
+    } else {
+      document.getElementById('view-history').innerHTML = renderHistory(currentState());
+      const keys = mergeActivityDates(await allLogKeys(), APP.timeEntries, APP.jobs, APP.projects, APP.ielts);
+      const logsById = {}; for (const k of keys) logsById[k] = await loadLog(k);
+      document.getElementById('hist-list').innerHTML = renderHistoryList(keys, logsById, APP.missions, APP.timeEntries);
+    }
   } else if (view === 'review') {
     APP.reviewYearMonth = APP.reviewYearMonth || APP.todayKey.slice(0, 7);
     const monthly = await monthlyReview(APP.reviewYearMonth, APP.missions);
@@ -372,7 +408,8 @@ async function saveNewIeltsTask() {
 }
 async function toggleIeltsTask(id) {
   const t = APP.ielts.tasks.find((x) => x.id === id); if (!t) return;
-  t.status = t.status === 'done' ? 'planned' : 'done'; // task/output metric only — never touches time
+  if (t.status === 'done') { t.status = 'planned'; t.completedAt = null; }
+  else { t.status = 'done'; t.completedAt = APP.todayKey; } // task/output metric only — never touches time
   await saveIelts(APP.ielts); await renderCurrentView();
 }
 

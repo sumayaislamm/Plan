@@ -78,6 +78,13 @@ function displayScore(rawFloat) {
   return Math.round(v);
 }
 function currentMomentum(series) { return series.length ? displayScore(series[series.length - 1].score) : MOMENTUM_BASELINE; }
+// Momentum AS IT WAS on one specific date — distinct from currentMomentum
+// (the latest value). History previously showed today's momentum for every
+// past day viewed; this is what that should have used instead.
+function momentumForDate(series, date) {
+  const point = series.find((p) => p.date === date);
+  return point ? displayScore(point.score) : null;
+}
 function momentumTrend(series) {
   if (series.length < 2) return 'steady';
   const diff = series[series.length - 1].score - series[series.length - 2].score;
