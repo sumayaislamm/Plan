@@ -23,7 +23,15 @@ function addIeltsTask(data, { type, skill, notes, date }) {
   data.tasks.unshift({ id: 'it_' + Date.now(), type, skill, notes: sanitizeNote(notes), date: date || getDateKey(new Date()), status: 'planned', completedAt: null });
   return true;
 }
-function completeIeltsTask(data, taskId) { const t = data.tasks.find((x) => x.id === taskId); if (t) t.status = 'done'; }
+// Mirrors toggleIeltsTask's exact behavior/convention (same completedAt
+// semantics, same reset-to-'planned' target) — kept consistent even though
+// currently unused, per instruction.
+function completeIeltsTask(data, taskId) {
+  const t = data.tasks.find((x) => x.id === taskId);
+  if (!t) return;
+  if (t.status === 'done') { t.status = 'planned'; t.completedAt = null; }
+  else { t.status = 'done'; t.completedAt = getDateKey(new Date()); } // task/output metric only — never touches time
+}
 // Tasks completed on an exact date — used by History's daily retrospective. Never counted as time.
 function ieltsTasksCompletedOnDate(data, date) { return (data.tasks || []).filter((t) => t.completedAt === date); }
 // Returns false (and leaves data untouched) on an invalid score — caller must surface the rejection.
@@ -43,7 +51,12 @@ function ieltsWeeklyAnalytics(data, weekStart, timeEntries) {
     const day = addDays(weekStart, i);
     if (missionActualMinutesRange(timeEntries || [], 'ielts', day, addDays(day, 1)) > 0) sessions++;
   }
-  const completedTasks = data.tasks.filter((t) => t.status === 'done').length;
+  // Only tasks completed WITHIN this week count — a task completed last
+  // month must not inflate "this week's" number. Missing/malformed
+  // completedAt is safely excluded, never counted.
+  const completedTasks = data.tasks.filter((t) =>
+    t.status === 'done' && typeof t.completedAt === 'string' && t.completedAt >= weekStart && t.completedAt < weekEnd
+  ).length;
   let weakest = null, weakestScore = 10;
   IELTS_SKILLS.forEach((s) => { const c = data.skills[s].current; if (c != null && c < weakestScore) { weakestScore = c; weakest = s; } });
   return { totalMinutes, sessions, weakest, completedTasks };

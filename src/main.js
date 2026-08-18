@@ -92,12 +92,13 @@ async function buildHistoryDetailHtml(date) {
   const prayerTimesForDate = await fetchPrayerTimes(date);
   const taskActivity = tasksCompletedOnDate(APP.projects, date);
   const jobActivity = jobsAppliedOnDate(APP.jobs, date);
+  const ieltsTaskActivity = ieltsTasksCompletedOnDate(APP.ielts, date);
   const momentumScore = momentumForDate(APP.momentumSeries, date);
-  const hasActivity = dayHasActivity(log, APP.timeEntries, date, APP.projects, APP.jobs);
+  const hasActivity = dayHasActivity(log, APP.timeEntries, date, APP.projects, APP.jobs, APP.ielts);
   const canGoNext = addDays(date, 1) < APP.todayKey;
   return renderHistoryDetail({
     date, log, prayerTimes: prayerTimesForDate, timeEntries: APP.timeEntries, missions: APP.missions,
-    momentumScore, taskActivity, jobActivity, hasActivity, canGoNext,
+    momentumScore, taskActivity, jobActivity, ieltsTaskActivity, hasActivity, canGoNext,
   });
 }
 function openHistoryDetail(date) { APP.historyDetailDate = date; renderCurrentView(); }

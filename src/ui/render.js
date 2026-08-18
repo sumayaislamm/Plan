@@ -78,7 +78,7 @@ function renderToday(S) {
   html += renderMomentumCard(momentum);
 
   html += `<div class="sec-hdr"><span class="sec-title">Foundations</span><span class="sec-link" onclick="switchViewByName('missions')">All missions →</span></div>`;
-  html += renderFoundationsQuick(missions, log, S.isPast);
+  html += renderFoundationsQuick(missions, log, S.isPast, timeEntries);
 
   html += `<div class="sec-hdr"><span class="sec-title">Life Balance</span></div>`;
   html += renderBalanceBars(balance, true);
@@ -174,7 +174,7 @@ function renderMomentumCard(momentum) {
   </div>`;
 }
 
-function renderFoundationsQuick(missions, log, readonly) {
+function renderFoundationsQuick(missions, log, readonly, timeEntries) {
   const foundations = missions.filter((m) => m.category === 'foundation' && m.id !== 'prayer');
   const cards = foundations.map((m) => {
     let isDone, sub;
@@ -183,8 +183,15 @@ function renderFoundationsQuick(missions, log, readonly) {
       isDone = done >= (m.levels.minimum || 1);
       sub = `${done} logged today`;
     } else {
-      isDone = !!log.quickMin[m.id];
-      sub = `min ${dur$(m.levels.minimum)} · tap to acknowledge`;
+      // Time-based Foundation: actual logged time (Focus or Manual, via the
+      // canonical timeEntries system) satisfies completion on its own —
+      // quickMin remains available as a separate "acknowledge without
+      // logging exact time" option, but it can no longer contradict real
+      // logged time that already meets the minimum.
+      const actual = missionActualMinutes(timeEntries || [], m.id, log.date);
+      const meetsMinimum = actual >= (m.levels.minimum || 0) && (m.levels.minimum || 0) > 0;
+      isDone = meetsMinimum || !!log.quickMin[m.id];
+      sub = actual > 0 ? `${fmtMin(actual)} logged today` : `min ${dur$(m.levels.minimum)} · tap to acknowledge`;
     }
     return `<div class="hc${isDone ? ' checked' : ''}" style="${readonly?'':'cursor:pointer'}"
       ${readonly ? '' : `onclick="quickAction('${m.id}')"`}>
@@ -461,7 +468,7 @@ function renderHistoryList(keys, logsById, missions, timeEntries) {
 // exactly as Today does, so the same entries/prayer state render identically
 // in both places (single source of truth, no history-specific copies).
 function renderHistoryDetail(D) {
-  const { date, log, prayerTimes, timeEntries, missions, momentumScore, taskActivity, jobActivity, hasActivity, canGoNext } = D;
+  const { date, log, prayerTimes, timeEntries, missions, momentumScore, taskActivity, jobActivity, ieltsTaskActivity, hasActivity, canGoNext } = D;
 
   let html = `<button class="btn ghost block" style="margin-bottom:11px" onclick="closeHistoryDetail()">← Back to History</button>`;
   html += `<div class="hero"><div class="hero-eyebrow">${fmtKeyLong(date)}</div><h1 class="hero-title">Day <em>Retrospective</em></h1></div>`;
@@ -509,6 +516,14 @@ function renderHistoryDetail(D) {
       html += `<div style="display:flex;justify-content:space-between;font-size:0.75rem;padding:5px 0"><span>${MISSION_ICON[m.id]||''} ${esc(m.name)}</span><span style="color:var(--text2)">${esc(line)}</span></div>`;
     });
     html += `</div>`;
+  }
+
+  if (ieltsTaskActivity.length) {
+    html += `<div class="sec-hdr"><span class="sec-title">IELTS Practice Completed</span></div><div class="card">`;
+    ieltsTaskActivity.forEach((t) => {
+      html += `<div style="font-size:0.75rem;padding:5px 0;border-bottom:1px solid var(--border)">✓ ${esc(t.type)} <span style="color:var(--text3);font-size:0.65rem">— ${esc(t.skill)}</span>${t.notes ? `<div style="font-size:0.65rem;color:var(--text3);margin-top:2px">${esc(t.notes)}</div>` : ''}</div>`;
+    });
+    html += `<div style="font-size:0.6rem;color:var(--text3);margin-top:6px;font-style:italic">Task completion only — actual time (if logged) appears in the Work Log above.</div></div>`;
   }
 
   if (taskActivity.length) {

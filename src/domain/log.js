@@ -80,12 +80,13 @@ function mergeActivityDates(logKeys, timeEntries, jobs, projects, ielts) {
 }
 
 // Any recorded activity at all for one date — used for History's empty state.
-function dayHasActivity(log, timeEntries, date, projects, jobs) {
+function dayHasActivity(log, timeEntries, date, projects, jobs, ielts) {
   if (log.prayers && Object.values(log.prayers).some(Boolean)) return true;
   if (entriesForDate(timeEntries, date).length) return true;
   if (log.progress && Object.values(log.progress).some((v) => v > 0)) return true;
   if (log.reflection && (log.reflection.accomplished || log.reflection.blocker || log.reflection.tomorrowFocus)) return true;
   if (tasksCompletedOnDate(projects, date).length) return true;
   if (jobsAppliedOnDate(jobs, date).length) return true;
+  if (ielts && ieltsTasksCompletedOnDate(ielts, date).length) return true;
   return false;
 }
