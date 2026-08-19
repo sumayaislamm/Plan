@@ -8,7 +8,7 @@
 // representation.
 // ═══════════════════════════════════════════════════════
 function renderReligious(R) {
-  const { date, isToday, log, prayerTimes, commitments, quranMinutes, previousDays, canGoNext } = R;
+  const { date, isToday, log, prayerTimes, commitments, quranMinutes, previousDates, canGoNext } = R;
 
   let html = `<div class="hero"><div class="hero-eyebrow">Religious</div><h1 class="hero-title">Deen <em>Tracker</em></h1>
     <p class="hero-sub">Prayers, dhikr, and Quran — all read from the same records as Today.</p></div>`;
@@ -35,13 +35,10 @@ function renderReligious(R) {
   </div></div>`;
   if (isToday) html += `<div class="sec-link" style="text-align:center;display:block;margin:-4px 0 10px" onclick="switchViewByName('today')">Log time on Today →</div>`;
 
-  if (previousDays.length) {
-    html += `<div class="sec-hdr"><span class="sec-title">Previous Records</span></div>`;
-    previousDays.forEach((d) => {
-      html += `<div class="list-item" onclick="openReligiousDate('${d.date}')">
-        <div class="li-top"><span class="li-title">${fmtKey(d.date)}</span></div>
-        <div class="li-sub">Prayers: ${d.prayerCount}/5 · Istighfar: ${fmtCount(d.istighfar)} · Dua Qunut: ${fmtCount(d.duaQunut)} · Durood: ${fmtCount(d.durood)}${d.quranMinutes > 0 ? ` · Quran: ${fmtMin(d.quranMinutes)}` : ''}</div>
-      </div>`;
+  if (previousDates.length) {
+    html += `<div class="sec-hdr"><span class="sec-title">Previous Records</span><span class="sec-badge">${previousDates.length}</span></div>`;
+    previousDates.forEach((d) => {
+      html += `<div class="list-item" onclick="openReligiousDate('${d}')"><div class="li-top"><span class="li-title">${fmtKey(d)}</span></div></div>`;
     });
   }
 

@@ -656,19 +656,19 @@ async function buildReligiousHtml() {
   const prayerTimesForDate = await fetchPrayerTimes(date);
   const commitments = await loadCommitments(date);
   const quranMinutes = missionActualMinutes(APP.timeEntries, 'quran', date);
-  const previousDays = [];
-  for (let i = 1; i <= 14; i++) {
-    const d = addDays(date, -i);
-    const dLog = await loadLog(d);
-    const dCommit = await loadCommitments(d);
-    const dQuran = missionActualMinutes(APP.timeEntries, 'quran', d);
-    const prayerCount = Object.values(dLog.prayers).filter(Boolean).length;
-    if (prayerCount > 0 || commitmentsHasActivity(dCommit) || dQuran > 0) {
-      previousDays.push({ date: d, prayerCount, istighfar: dCommit.istighfar, duaQunut: dCommit.duaQunut, durood: dCommit.durood, quranMinutes: dQuran });
-    }
-  }
+  // Full history, no artificial day cap — but lightweight: this only unions
+  // already-cheap key/date lists (no per-day loadLog/loadCommitments calls).
+  // The actual detailed record for a given date is only loaded when that
+  // date is opened (openReligiousDate re-runs this function for just that
+  // one date), so cost stays flat regardless of how much history exists.
+  const logDates = await allLogKeys(); // local+remote merged, already sorted desc
+  const commitDates = await allCommitmentDates();
+  const quranDates = [...new Set((APP.timeEntries || []).filter((e) => e.category === 'quran' && e.minutes > 0).map((e) => e.date))];
+  const previousDates = [...new Set([...logDates, ...commitDates, ...quranDates])]
+    .filter((d) => d !== date)
+    .sort((a, b) => b.localeCompare(a));
   const canGoNext = addDays(date, 1) < APP.todayKey;
-  return renderReligious({ date, isToday, log, prayerTimes: prayerTimesForDate, commitments, quranMinutes, previousDays, canGoNext });
+  return renderReligious({ date, isToday, log, prayerTimes: prayerTimesForDate, commitments, quranMinutes, previousDates, canGoNext });
 }
 function openReligiousDate(date) { APP.religiousDate = date; renderCurrentView(); }
 function religiousPrevDay() { openReligiousDate(addDays(APP.religiousDate || APP.todayKey, -1)); }
