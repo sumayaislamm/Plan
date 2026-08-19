@@ -11,6 +11,7 @@ const APP = {
   focusPausedAccumMs: 0, focusPausedAt: null,
   currentProjectId: null, reviewYearMonth: null,
   editingEntryId: null, saving: false, analyticsPeriod: 'week', historyDetailDate: null,
+  commitments: null, religiousDate: null,
 };
 
 let toastTimer;
@@ -38,6 +39,7 @@ async function refreshCore() {
   APP.prayerTimes = await fetchPrayerTimes(APP.viewingKey);
   APP.timeEntries = await loadAllTimeEntries();
   APP.jobs = await loadJobs();
+  APP.commitments = await loadCommitments(APP.viewingKey);
   APP.weekStart = weekStartKey(new Date(APP.viewingKey + 'T00:00:00'));
   APP.weekLogs = await loadWeekLogs(APP.weekStart);
   APP.weekProgress = {};
@@ -68,7 +70,7 @@ function currentState() {
     nextAction: isToday ? nextAction : null, weeklyRemaining, balance: APP.balance,
     viewingKey: APP.viewingKey, isPast: APP.viewingKey < APP.todayKey,
     weekProgress: APP.weekProgress, weekStart: APP.weekStart, timeEntries: APP.timeEntries,
-    analyticsPeriod: APP.analyticsPeriod,
+    analyticsPeriod: APP.analyticsPeriod, commitments: APP.commitments,
   };
 }
 
@@ -79,7 +81,7 @@ async function switchView(view, btn) {
   document.getElementById('view-' + view).classList.add('active');
   if (btn) btn.classList.add('active'); else { const b = document.querySelector(`.tabbtn[data-view="${view}"]`); if (b) b.classList.add('active'); }
   APP.currentView = view;
-  document.getElementById('nav-title').textContent = { today:'Today', missions:'Missions', ielts:'IELTS', programming:'Programming', jobs:'Jobs', weekly:'This Week', history:'History', review:'Monthly Review' }[view] || 'Life OS';
+  document.getElementById('nav-title').textContent = { today:'Today', missions:'Missions', ielts:'IELTS', programming:'Programming', jobs:'Jobs', weekly:'This Week', history:'History', religious:'Religious', review:'Monthly Review' }[view] || 'Life OS';
   await renderCurrentView();
 }
 function switchViewByName(view) { switchView(view, document.querySelector(`.tabbtn[data-view="${view}"]`)); }
@@ -93,12 +95,16 @@ async function buildHistoryDetailHtml(date) {
   const taskActivity = tasksCompletedOnDate(APP.projects, date);
   const jobActivity = jobsAppliedOnDate(APP.jobs, date);
   const ieltsTaskActivity = ieltsTasksCompletedOnDate(APP.ielts, date);
+  const featureActivity = featuresCompletedOnDate(APP.projects, date);
+  const commitmentsForDate = await loadCommitments(date);
   const momentumScore = momentumForDate(APP.momentumSeries, date);
-  const hasActivity = dayHasActivity(log, APP.timeEntries, date, APP.projects, APP.jobs, APP.ielts);
+  const hasActivity = dayHasActivity(log, APP.timeEntries, date, APP.projects, APP.jobs, APP.ielts)
+    || featureActivity.length > 0 || commitmentsHasActivity(commitmentsForDate);
   const canGoNext = addDays(date, 1) < APP.todayKey;
   return renderHistoryDetail({
     date, log, prayerTimes: prayerTimesForDate, timeEntries: APP.timeEntries, missions: APP.missions,
-    momentumScore, taskActivity, jobActivity, ieltsTaskActivity, hasActivity, canGoNext,
+    momentumScore, taskActivity, jobActivity, ieltsTaskActivity, featureActivity, commitments: commitmentsForDate,
+    hasActivity, canGoNext,
   });
 }
 function openHistoryDetail(date) { APP.historyDetailDate = date; renderCurrentView(); }
@@ -130,15 +136,22 @@ async function renderCurrentView() {
     document.getElementById('view-jobs').innerHTML = renderJobs({ jobs: APP.jobs, weekStart: APP.weekStart });
   } else if (view === 'weekly') {
     document.getElementById('view-weekly').innerHTML = renderWeekly(currentState());
+    const commitTotals = await weeklyCommitmentTotals(APP.weekStart);
+    document.getElementById('view-weekly').innerHTML += renderCommitmentsWeeklySection(commitTotals);
   } else if (view === 'history') {
     if (APP.historyDetailDate) {
       document.getElementById('view-history').innerHTML = await buildHistoryDetailHtml(APP.historyDetailDate);
     } else {
       document.getElementById('view-history').innerHTML = renderHistory(currentState());
-      const keys = mergeActivityDates(await allLogKeys(), APP.timeEntries, APP.jobs, APP.projects, APP.ielts);
+      let keys = mergeActivityDates(await allLogKeys(), APP.timeEntries, APP.jobs, APP.projects, APP.ielts);
+      const commitDates = await allCommitmentDates();
+      const featureDates = []; APP.projects.forEach((p) => p.features.forEach((f) => { if (f.completedAt) featureDates.push(f.completedAt); }));
+      keys = [...new Set([...keys, ...commitDates, ...featureDates])].sort((a, b) => b.localeCompare(a));
       const logsById = {}; for (const k of keys) logsById[k] = await loadLog(k);
       document.getElementById('hist-list').innerHTML = renderHistoryList(keys, logsById, APP.missions, APP.timeEntries);
     }
+  } else if (view === 'religious') {
+    document.getElementById('view-religious').innerHTML = await buildReligiousHtml();
   } else if (view === 'review') {
     APP.reviewYearMonth = APP.reviewYearMonth || APP.todayKey.slice(0, 7);
     const monthly = await monthlyReview(APP.reviewYearMonth, APP.missions);
@@ -575,6 +588,131 @@ async function saveSettings() {
   if (url && key) { saveSupabaseConfig(url, key); const ok = await testSupabaseConnection(); setSyncDot(ok ? 'synced' : 'error'); showToast(ok ? '✅ Connected' : '⚠️ Could not connect — check URL/key/table'); }
   else showToast('Saved');
   closeModal(); await refreshCore(); await renderCurrentView();
+}
+
+// ── INIT ───────────────────────────────────────────────
+// ── DAILY COMMITMENTS (isolated — steps/dhikr/LeetCode/GitHub) ─────────
+async function commitmentIncrement(key, amount) {
+  if (APP.viewingKey !== APP.todayKey) { showToast('Historical days are read-only'); return; }
+  await withSaveLock(async () => {
+    APP.commitments[key] = Math.max(0, (APP.commitments[key] || 0) + amount);
+    await saveCommitments(APP.viewingKey, APP.commitments);
+    await renderCurrentView();
+  });
+}
+function openCommitmentEdit(key) {
+  const meta = COMMITMENT_META[key];
+  openModal(`<div class="modal-handle"></div><div class="modal-title">Edit ${esc(meta.label)}</div>
+    <div class="field"><label>${esc(meta.label)}${meta.unit ? ' (' + meta.unit + ')' : ''}</label><input type="number" min="0" id="ce-val" value="${APP.commitments[key]}"/></div>
+    <div id="ce-err" style="font-size:0.65rem;color:var(--red);display:none;margin-bottom:8px"></div>
+    <div class="modal-btns"><button class="btn block" onclick="closeModal()">Cancel</button>
+    <button class="btn primary block" onclick="saveCommitmentEdit('${key}')">Save</button></div>`);
+}
+async function saveCommitmentEdit(key) {
+  await withSaveLock(async () => {
+    const v = Number(document.getElementById('ce-val').value);
+    if (!isFinite(v) || v < 0) { const e = document.getElementById('ce-err'); e.textContent = 'Enter a number 0 or greater.'; e.style.display = 'block'; return; }
+    APP.commitments[key] = v;
+    await saveCommitments(APP.viewingKey, APP.commitments);
+    closeModal(); await renderCurrentView();
+  });
+}
+async function toggleLeetcodeToday() {
+  if (APP.viewingKey !== APP.todayKey) { showToast('Historical days are read-only'); return; }
+  await withSaveLock(async () => {
+    APP.commitments.leetcode.completed = !APP.commitments.leetcode.completed; // completion only — never touches programming time
+    await saveCommitments(APP.viewingKey, APP.commitments);
+    await renderCurrentView();
+  });
+}
+function openLeetcodeEdit() {
+  const lc = APP.commitments.leetcode;
+  openModal(`<div class="modal-handle"></div><div class="modal-title">LeetCode Details</div>
+    <div class="field"><label>Problem name</label><input type="text" id="lc-name" value="${escAttr(lc.problemName)}"/></div>
+    <div class="field"><label>URL</label><input type="text" id="lc-url" value="${escAttr(lc.url)}" placeholder="https://..."/></div>
+    <div class="field"><label>Note</label><input type="text" id="lc-note" value="${escAttr(lc.note)}"/></div>
+    <div id="lc-err" style="font-size:0.65rem;color:var(--red);display:none;margin-bottom:8px"></div>
+    <div class="modal-btns"><button class="btn block" onclick="closeModal()">Cancel</button>
+    <button class="btn primary block" onclick="saveLeetcodeEdit()">Save</button></div>`);
+}
+async function saveLeetcodeEdit() {
+  await withSaveLock(async () => {
+    const url = document.getElementById('lc-url').value.trim();
+    const validated = validateUrl(url);
+    if (validated === null) { const e = document.getElementById('lc-err'); e.textContent = 'URL must start with http:// or https://'; e.style.display = 'block'; return; }
+    APP.commitments.leetcode.problemName = document.getElementById('lc-name').value.trim();
+    APP.commitments.leetcode.url = validated;
+    APP.commitments.leetcode.note = document.getElementById('lc-note').value.trim();
+    await saveCommitments(APP.viewingKey, APP.commitments);
+    closeModal(); await renderCurrentView();
+  });
+}
+
+// ── RELIGIOUS TAB (isolated — read-only; editing happens on Today) ─────
+async function buildReligiousHtml() {
+  const date = APP.religiousDate || APP.todayKey;
+  const isToday = date === APP.todayKey;
+  const log = await loadLog(date);
+  const prayerTimesForDate = await fetchPrayerTimes(date);
+  const commitments = await loadCommitments(date);
+  const quranMinutes = missionActualMinutes(APP.timeEntries, 'quran', date);
+  const previousDays = [];
+  for (let i = 1; i <= 14; i++) {
+    const d = addDays(date, -i);
+    const dLog = await loadLog(d);
+    const dCommit = await loadCommitments(d);
+    const dQuran = missionActualMinutes(APP.timeEntries, 'quran', d);
+    const prayerCount = Object.values(dLog.prayers).filter(Boolean).length;
+    if (prayerCount > 0 || commitmentsHasActivity(dCommit) || dQuran > 0) {
+      previousDays.push({ date: d, prayerCount, istighfar: dCommit.istighfar, duaQunut: dCommit.duaQunut, durood: dCommit.durood, quranMinutes: dQuran });
+    }
+  }
+  const canGoNext = addDays(date, 1) < APP.todayKey;
+  return renderReligious({ date, isToday, log, prayerTimes: prayerTimesForDate, commitments, quranMinutes, previousDays, canGoNext });
+}
+function openReligiousDate(date) { APP.religiousDate = date; renderCurrentView(); }
+function religiousPrevDay() { openReligiousDate(addDays(APP.religiousDate || APP.todayKey, -1)); }
+function religiousNextDay() { const n = addDays(APP.religiousDate || APP.todayKey, 1); if (n <= APP.todayKey) openReligiousDate(n); }
+function religiousGoToday() { APP.religiousDate = null; renderCurrentView(); }
+
+// ── PROJECT ROADMAP (isolated — feature planned/completed status) ──────
+async function toggleFeatureCompletion(pid, fid) {
+  const p = APP.projects.find((x) => x.id === pid); const f = p.features.find((x) => x.id === fid);
+  toggleFeatureStatus(f, APP.todayKey);
+  await saveProjects(APP.projects);
+  openProjectDetail(pid);
+  if (APP.currentView === 'programming') await renderCurrentView();
+}
+function openEditFeature(pid, fid) {
+  const p = APP.projects.find((x) => x.id === pid); const f = p.features.find((x) => x.id === fid);
+  openModal(`<div class="modal-handle"></div><div class="modal-title">Edit Feature</div>
+    <div class="field"><label>Name</label><input type="text" id="ef-name" value="${escAttr(f.name)}"/></div>
+    <div class="modal-btns"><button class="btn block" onclick="openProjectDetail('${pid}')">Cancel</button>
+    <button class="btn primary block" onclick="saveEditFeature('${pid}','${fid}')">Save</button></div>`);
+}
+async function saveEditFeature(pid, fid) {
+  await withSaveLock(async () => {
+    const p = APP.projects.find((x) => x.id === pid); const f = p.features.find((x) => x.id === fid);
+    const ok = renameFeature(f, document.getElementById('ef-name').value);
+    if (!ok) return; // empty name — leave existing name untouched, just close back to the project
+    await saveProjects(APP.projects);
+    openProjectDetail(pid);
+  });
+}
+function confirmDeleteFeature(pid, fid) {
+  const p = APP.projects.find((x) => x.id === pid); const f = p.features.find((x) => x.id === fid);
+  if (!f.tasks.length) { executeDeleteFeature(pid, fid); return; } // no tasks — nothing to lose, no confirmation needed
+  openModal(`<div class="modal-handle"></div><div class="modal-title">Delete "${esc(f.name)}"?</div>
+    <div style="font-size:0.75rem;color:var(--text2);margin-bottom:14px">This feature has ${f.tasks.length} task${f.tasks.length===1?'':'s'}. Deleting it removes those tasks too. Other features, projects, and time entries are unaffected.</div>
+    <div class="modal-btns"><button class="btn block" onclick="openProjectDetail('${pid}')">Cancel</button>
+    <button class="btn primary block" style="background:var(--red)" onclick="executeDeleteFeature('${pid}','${fid}')">Delete</button></div>`);
+}
+async function executeDeleteFeature(pid, fid) {
+  const p = APP.projects.find((x) => x.id === pid);
+  deleteFeature(p, fid);
+  await saveProjects(APP.projects);
+  openProjectDetail(pid);
+  if (APP.currentView === 'programming') await renderCurrentView();
 }
 
 // ── INIT ───────────────────────────────────────────────

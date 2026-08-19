@@ -90,6 +90,8 @@ function renderToday(S) {
     </div>`;
   }
 
+  html += renderDailyCommitmentsSection(S.commitments, S.isPast);
+
   return html;
 }
 
@@ -313,17 +315,7 @@ function renderProgramming(S) {
 function renderProjectDetail(project) {
   let html = `<div class="hero"><div class="hero-eyebrow">${esc(project.status)}</div><h1 class="hero-title">${esc(project.name)}</h1></div>`;
   html += `<button class="btn ghost block" style="margin-bottom:10px" onclick="openNewFeature('${project.id}')">+ Add Feature</button>`;
-  project.features.forEach((f) => {
-    html += `<div class="sec-hdr"><span class="sec-title" style="font-size:0.82rem">${esc(f.name)}</span><span class="sec-link" onclick="openNewTask('${project.id}','${f.id}')">+ Task</span></div>`;
-    f.tasks.forEach((t) => {
-      const subDone = t.subtasks.filter((s) => s.done).length;
-      html += `<div class="list-item" onclick="toggleProjectTask('${project.id}','${f.id}','${t.id}')">
-        <div class="li-top"><span class="li-title" style="${t.status==='done'?'text-decoration:line-through;color:var(--text3)':''}">${esc(t.name)}</span>
-        <span class="status-chip status-${t.status==='done'?'Offer':'Preparing'}">${t.status}</span></div>
-        ${t.subtasks.length ? `<div class="li-sub">${subDone}/${t.subtasks.length} subtasks</div>` : ''}
-      </div>`;
-    });
-  });
+  html += renderFeatureRoadmap(project);
   return html;
 }
 
@@ -468,7 +460,7 @@ function renderHistoryList(keys, logsById, missions, timeEntries) {
 // exactly as Today does, so the same entries/prayer state render identically
 // in both places (single source of truth, no history-specific copies).
 function renderHistoryDetail(D) {
-  const { date, log, prayerTimes, timeEntries, missions, momentumScore, taskActivity, jobActivity, ieltsTaskActivity, hasActivity, canGoNext } = D;
+  const { date, log, prayerTimes, timeEntries, missions, momentumScore, taskActivity, jobActivity, ieltsTaskActivity, featureActivity, commitments, hasActivity, canGoNext } = D;
 
   let html = `<button class="btn ghost block" style="margin-bottom:11px" onclick="closeHistoryDetail()">← Back to History</button>`;
   html += `<div class="hero"><div class="hero-eyebrow">${fmtKeyLong(date)}</div><h1 class="hero-title">Day <em>Retrospective</em></h1></div>`;
@@ -533,6 +525,16 @@ function renderHistoryDetail(D) {
     });
     html += `</div>`;
   }
+
+  if (featureActivity && featureActivity.length) {
+    html += `<div class="sec-hdr"><span class="sec-title">Project Roadmap Activity</span></div><div class="card">`;
+    featureActivity.forEach((f) => {
+      html += `<div style="font-size:0.75rem;padding:5px 0;border-bottom:1px solid var(--border)">✓ ${esc(f.featureName)} feature completed <span style="color:var(--text3);font-size:0.65rem">— ${esc(f.projectName)}</span></div>`;
+    });
+    html += `</div>`;
+  }
+
+  html += renderCommitmentsHistoryBlock(commitments);
 
   if (jobActivity.length) {
     html += `<div class="sec-hdr"><span class="sec-title">Jobs</span></div><div class="card">`;

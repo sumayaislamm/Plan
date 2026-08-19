@@ -5,7 +5,7 @@ async function loadProjects() { return normalizeProjects(await storeGet('project
 async function saveProjects(p) { await storeSet('projects', p); }
 
 function newProject(name) { return { id: 'proj_' + Date.now(), name, status: 'active', features: [] }; }
-function newFeature(name) { return { id: 'feat_' + Date.now(), name, tasks: [] }; }
+function newFeature(name) { return { id: 'feat_' + Date.now(), name, status: 'planned', completedAt: null, tasks: [] }; }
 function newTask(name) { return { id: 'task_' + Date.now(), name, status: 'todo', subtasks: [], createdAt: getDateKey(new Date()), completedAt: null }; }
 function newSubtask(name) { return { id: 'sub_' + Date.now(), name, done: false }; }
 
@@ -46,6 +46,7 @@ function normalizeProjects(raw) {
     id: p.id, name: p.name, status: p.status === 'archived' ? 'archived' : 'active',
     features: Array.isArray(p.features) ? p.features.filter((f) => f && f.id).map((f) => ({
       id: f.id, name: f.name || '',
+      status: f.status === 'completed' ? 'completed' : 'planned', completedAt: f.completedAt || null, // defaults old data safely to 'planned'
       tasks: Array.isArray(f.tasks) ? f.tasks.filter((t) => t && t.id).map((t) => ({
         id: t.id, name: t.name || '', status: t.status === 'done' ? 'done' : 'todo',
         createdAt: t.createdAt || null, completedAt: t.completedAt || null,
@@ -53,4 +54,30 @@ function normalizeProjects(raw) {
       })) : [],
     })) : [],
   }));
+}
+
+// ── PROJECT ROADMAP (feature-level planned/completed status) ───────────
+// Additive only — does not alter task behavior at all.
+function toggleFeatureStatus(feature, todayKey) {
+  if (feature.status === 'completed') { feature.status = 'planned'; feature.completedAt = null; }
+  else { feature.status = 'completed'; feature.completedAt = todayKey; }
+}
+function renameFeature(feature, newName) {
+  const trimmed = (newName || '').trim();
+  if (!trimmed) return false;
+  feature.name = trimmed;
+  return true;
+}
+// Removes exactly one feature (and only its own tasks) from one project.
+// Never touches other projects/features/time entries/history records.
+function deleteFeature(project, featureId) {
+  project.features = project.features.filter((f) => f.id !== featureId);
+}
+// Completed features on an exact date — used by History's daily retrospective.
+function featuresCompletedOnDate(projects, date) {
+  const out = [];
+  (projects || []).forEach((p) => (p.features || []).forEach((f) => {
+    if (f.status === 'completed' && f.completedAt === date) out.push({ projectName: p.name, featureName: f.name });
+  }));
+  return out;
 }

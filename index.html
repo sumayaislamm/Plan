@@ -48,6 +48,7 @@
   <div class="view" id="view-jobs"></div>
   <div class="view" id="view-weekly"></div>
   <div class="view" id="view-history"></div>
+  <div class="view" id="view-religious"></div>
   <div class="view" id="view-review"></div>
 </main>
 
@@ -59,6 +60,7 @@
   <button class="tabbtn" data-view="jobs" onclick="switchView('jobs',this)"><span class="ti">💼</span>Jobs</button>
   <button class="tabbtn" data-view="weekly" onclick="switchView('weekly',this)"><span class="ti">📊</span>Week</button>
   <button class="tabbtn" data-view="history" onclick="switchView('history',this)"><span class="ti">📅</span>History</button>
+  <button class="tabbtn" data-view="religious" onclick="switchView('religious',this)"><span class="ti">🕌</span>Religious</button>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -82,7 +84,11 @@
 <script src="src/domain/review.js"></script>
 <script src="src/domain/balance.js"></script>
 <script src="src/domain/backlog.js"></script>
+<script src="src/domain/commitments.js"></script>
 <script src="src/ui/render.js"></script>
+<script src="src/ui/render-commitments.js"></script>
+<script src="src/ui/render-religious.js"></script>
+<script src="src/ui/render-roadmap.js"></script>
 <script src="src/main.js"></script>
 </body>
 </html>
