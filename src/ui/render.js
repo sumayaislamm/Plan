@@ -460,7 +460,7 @@ function renderHistoryList(keys, logsById, missions, timeEntries) {
 // exactly as Today does, so the same entries/prayer state render identically
 // in both places (single source of truth, no history-specific copies).
 function renderHistoryDetail(D) {
-  const { date, log, prayerTimes, timeEntries, missions, momentumScore, taskActivity, jobActivity, ieltsTaskActivity, featureActivity, commitments, hasActivity, canGoNext } = D;
+  const { date, log, prayerTimes, timeEntries, missions, momentumScore, taskActivity, jobActivity, ieltsTaskActivity, featureActivity, commitments, cookingEntries, religiousJournalDay, hasActivity, canGoNext } = D;
 
   let html = `<button class="btn ghost block" style="margin-bottom:11px" onclick="closeHistoryDetail()">← Back to History</button>`;
   html += `<div class="hero"><div class="hero-eyebrow">${fmtKeyLong(date)}</div><h1 class="hero-title">Day <em>Retrospective</em></h1></div>`;
@@ -535,6 +535,9 @@ function renderHistoryDetail(D) {
   }
 
   html += renderCommitmentsHistoryBlock(commitments);
+
+  html += renderCookingHistoryBlock(cookingEntries);
+  html += renderReligiousJournalHistoryBlock(religiousJournalDay);
 
   if (jobActivity.length) {
     html += `<div class="sec-hdr"><span class="sec-title">Jobs</span></div><div class="card">`;

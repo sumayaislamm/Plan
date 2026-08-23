@@ -8,7 +8,7 @@
 // representation.
 // ═══════════════════════════════════════════════════════
 function renderReligious(R) {
-  const { date, isToday, log, prayerTimes, commitments, quranMinutes, previousDates, canGoNext } = R;
+  const { date, isToday, log, prayerTimes, commitments, quranMinutes, religiousJournalDay, previousDates, canGoNext } = R;
 
   let html = `<div class="hero"><div class="hero-eyebrow">Religious</div><h1 class="hero-title">Deen <em>Tracker</em></h1>
     <p class="hero-sub">Prayers, dhikr, and Quran — all read from the same records as Today.</p></div>`;
@@ -34,6 +34,8 @@ function renderReligious(R) {
     <span>Actual time</span><span style="color:var(--gold);font-weight:600">${quranMinutes > 0 ? fmtMin(quranMinutes) : '—'}</span>
   </div></div>`;
   if (isToday) html += `<div class="sec-link" style="text-align:center;display:block;margin:-4px 0 10px" onclick="switchViewByName('today')">Log time on Today →</div>`;
+
+  html += renderReligiousJournalHistoryBlock(religiousJournalDay);
 
   if (previousDates.length) {
     html += `<div class="sec-hdr"><span class="sec-title">Previous Records</span><span class="sec-badge">${previousDates.length}</span></div>`;

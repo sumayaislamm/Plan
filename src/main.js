@@ -11,7 +11,7 @@ const APP = {
   focusPausedAccumMs: 0, focusPausedAt: null,
   currentProjectId: null, reviewYearMonth: null,
   editingEntryId: null, saving: false, analyticsPeriod: 'week', historyDetailDate: null,
-  commitments: null, religiousDate: null,
+  commitments: null, religiousDate: null, cookingEntries: [], cookingSearchQuery: '', editingCookingId: null,
 };
 
 let toastTimer;
@@ -40,6 +40,7 @@ async function refreshCore() {
   APP.timeEntries = await loadAllTimeEntries();
   APP.jobs = await loadJobs();
   APP.commitments = await loadCommitments(APP.viewingKey);
+  APP.cookingEntries = await loadCookingEntries();
   APP.weekStart = weekStartKey(new Date(APP.viewingKey + 'T00:00:00'));
   APP.weekLogs = await loadWeekLogs(APP.weekStart);
   APP.weekProgress = {};
@@ -81,7 +82,7 @@ async function switchView(view, btn) {
   document.getElementById('view-' + view).classList.add('active');
   if (btn) btn.classList.add('active'); else { const b = document.querySelector(`.tabbtn[data-view="${view}"]`); if (b) b.classList.add('active'); }
   APP.currentView = view;
-  document.getElementById('nav-title').textContent = { today:'Today', missions:'Missions', ielts:'IELTS', programming:'Programming', jobs:'Jobs', weekly:'This Week', history:'History', religious:'Religious', review:'Monthly Review' }[view] || 'Life OS';
+  document.getElementById('nav-title').textContent = { today:'Today', missions:'Missions', ielts:'IELTS', programming:'Programming', jobs:'Jobs', weekly:'This Week', history:'History', religious:'Religious', life:'Life', review:'Monthly Review' }[view] || 'Life OS';
   await renderCurrentView();
 }
 function switchViewByName(view) { switchView(view, document.querySelector(`.tabbtn[data-view="${view}"]`)); }
@@ -97,13 +98,17 @@ async function buildHistoryDetailHtml(date) {
   const ieltsTaskActivity = ieltsTasksCompletedOnDate(APP.ielts, date);
   const featureActivity = featuresCompletedOnDate(APP.projects, date);
   const commitmentsForDate = await loadCommitments(date);
+  const cookingForDate = cookingEntriesForDate(APP.cookingEntries, date);
+  const religiousJournalForDate = await loadReligiousDay(date);
   const momentumScore = momentumForDate(APP.momentumSeries, date);
   const hasActivity = dayHasActivity(log, APP.timeEntries, date, APP.projects, APP.jobs, APP.ielts)
-    || featureActivity.length > 0 || commitmentsHasActivity(commitmentsForDate);
+    || featureActivity.length > 0 || commitmentsHasActivity(commitmentsForDate)
+    || cookingForDate.length > 0 || religiousDayHasActivity(religiousJournalForDate);
   const canGoNext = addDays(date, 1) < APP.todayKey;
   return renderHistoryDetail({
     date, log, prayerTimes: prayerTimesForDate, timeEntries: APP.timeEntries, missions: APP.missions,
     momentumScore, taskActivity, jobActivity, ieltsTaskActivity, featureActivity, commitments: commitmentsForDate,
+    cookingEntries: cookingForDate, religiousJournalDay: religiousJournalForDate,
     hasActivity, canGoNext,
   });
 }
@@ -146,12 +151,16 @@ async function renderCurrentView() {
       let keys = mergeActivityDates(await allLogKeys(), APP.timeEntries, APP.jobs, APP.projects, APP.ielts);
       const commitDates = await allCommitmentDates();
       const featureDates = []; APP.projects.forEach((p) => p.features.forEach((f) => { if (f.completedAt) featureDates.push(f.completedAt); }));
-      keys = [...new Set([...keys, ...commitDates, ...featureDates])].sort((a, b) => b.localeCompare(a));
+      const cookingDates = allCookingDates(APP.cookingEntries);
+      const religiousJournalDates = await allReligiousJournalDates();
+      keys = [...new Set([...keys, ...commitDates, ...featureDates, ...cookingDates, ...religiousJournalDates])].sort((a, b) => b.localeCompare(a));
       const logsById = {}; for (const k of keys) logsById[k] = await loadLog(k);
       document.getElementById('hist-list').innerHTML = renderHistoryList(keys, logsById, APP.missions, APP.timeEntries);
     }
   } else if (view === 'religious') {
     document.getElementById('view-religious').innerHTML = await buildReligiousHtml();
+  } else if (view === 'life') {
+    document.getElementById('view-life').innerHTML = await buildLifeHtml();
   } else if (view === 'review') {
     APP.reviewYearMonth = APP.reviewYearMonth || APP.todayKey.slice(0, 7);
     const monthly = await monthlyReview(APP.reviewYearMonth, APP.missions);
@@ -656,6 +665,7 @@ async function buildReligiousHtml() {
   const prayerTimesForDate = await fetchPrayerTimes(date);
   const commitments = await loadCommitments(date);
   const quranMinutes = missionActualMinutes(APP.timeEntries, 'quran', date);
+  const religiousJournalDay = await loadReligiousDay(date);
   // Full history, no artificial day cap — but lightweight: this only unions
   // already-cheap key/date lists (no per-day loadLog/loadCommitments calls).
   // The actual detailed record for a given date is only loaded when that
@@ -664,11 +674,12 @@ async function buildReligiousHtml() {
   const logDates = await allLogKeys(); // local+remote merged, already sorted desc
   const commitDates = await allCommitmentDates();
   const quranDates = [...new Set((APP.timeEntries || []).filter((e) => e.category === 'quran' && e.minutes > 0).map((e) => e.date))];
-  const previousDates = [...new Set([...logDates, ...commitDates, ...quranDates])]
+  const religiousJournalDates = await allReligiousJournalDates();
+  const previousDates = [...new Set([...logDates, ...commitDates, ...quranDates, ...religiousJournalDates])]
     .filter((d) => d !== date)
     .sort((a, b) => b.localeCompare(a));
   const canGoNext = addDays(date, 1) < APP.todayKey;
-  return renderReligious({ date, isToday, log, prayerTimes: prayerTimesForDate, commitments, quranMinutes, previousDates, canGoNext });
+  return renderReligious({ date, isToday, log, prayerTimes: prayerTimesForDate, commitments, quranMinutes, religiousJournalDay, previousDates, canGoNext });
 }
 function openReligiousDate(date) { APP.religiousDate = date; renderCurrentView(); }
 function religiousPrevDay() { openReligiousDate(addDays(APP.religiousDate || APP.todayKey, -1)); }
@@ -713,6 +724,134 @@ async function executeDeleteFeature(pid, fid) {
   await saveProjects(APP.projects);
   openProjectDetail(pid);
   if (APP.currentView === 'programming') await renderCurrentView();
+}
+
+// ── INIT ───────────────────────────────────────────────
+// ── LIFE TAB — COOKING JOURNAL (isolated) ───────────────
+async function buildLifeHtml() {
+  const religiousDates = await allReligiousJournalDates();
+  religiousDates.sort((a, b) => b.localeCompare(a));
+  APP.cachedReligiousDates = religiousDates; // reused by renderLifeSearchOnly so a search keystroke doesn't need a fresh async call
+  return renderLife({ cookingEntries: APP.cookingEntries, searchQuery: APP.cookingSearchQuery, religiousDates });
+}
+function setCookingSearch(q) { APP.cookingSearchQuery = q; renderLifeSearchOnly(); }
+// Re-renders just the cooking list portion in place, so the search input never loses focus mid-typing.
+function renderLifeSearchOnly() {
+  const container = document.getElementById('view-life');
+  if (!container) return;
+  container.innerHTML = renderLife({ cookingEntries: APP.cookingEntries, searchQuery: APP.cookingSearchQuery, religiousDates: APP.cachedReligiousDates || [] });
+  const input = document.getElementById('cooking-search');
+  if (input) { input.focus(); input.selectionStart = input.selectionEnd = input.value.length; }
+}
+function openNewCookingEntry() { APP.editingCookingId = null; APP.cookAgainDraft = null; openModal(renderCookingForm(null)); }
+function openEditCookingEntry(id) {
+  const e = APP.cookingEntries.find((x) => x.id === id); if (!e) return;
+  APP.editingCookingId = id; APP.cookAgainDraft = e.wouldCookAgain;
+  openModal(renderCookingForm(e));
+}
+function openCookingDetail(id) {
+  const e = APP.cookingEntries.find((x) => x.id === id); if (!e) return;
+  openModal(renderCookingDetail(e));
+}
+function setCookAgainField(val) {
+  APP.cookAgainDraft = val;
+  const row = document.querySelector('#modal-sheet .pill-row');
+  if (row) row.querySelectorAll('.pill').forEach((p, i) => p.classList.toggle('active', (i === 0) === val));
+}
+function readCookingForm() {
+  return {
+    date: document.getElementById('cf-date').value || getDateKey(new Date()),
+    dish: document.getElementById('cf-dish').value,
+    source: document.getElementById('cf-source').value,
+    sourceUrl: document.getElementById('cf-url').value,
+    cookingTime: document.getElementById('cf-time').value ? Number(document.getElementById('cf-time').value) : null,
+    result: document.getElementById('cf-result').value,
+    rating: document.getElementById('cf-rating').value,
+    tips: document.getElementById('cf-tips').value,
+    nextTimeChanges: document.getElementById('cf-changes').value,
+    wouldCookAgain: APP.cookAgainDraft,
+  };
+}
+async function saveNewCookingEntry() {
+  await withSaveLock(async () => {
+    const { list, error } = addCookingEntry(APP.cookingEntries, readCookingForm());
+    if (error) { const e = document.getElementById('cf-err'); e.textContent = error; e.style.display = 'block'; return; }
+    APP.cookingEntries = list;
+    await saveCookingEntries(APP.cookingEntries);
+    closeModal(); await renderCurrentView(); showToast('Cooking entry saved');
+  });
+}
+async function saveEditCookingEntry(id) {
+  await withSaveLock(async () => {
+    const { list, error } = updateCookingEntry(APP.cookingEntries, id, readCookingForm());
+    if (error) { const e = document.getElementById('cf-err'); e.textContent = error; e.style.display = 'block'; return; }
+    APP.cookingEntries = list;
+    await saveCookingEntries(APP.cookingEntries);
+    closeModal(); await renderCurrentView(); showToast('Saved');
+  });
+}
+function confirmDeleteCookingEntry(id) {
+  const e = APP.cookingEntries.find((x) => x.id === id); if (!e) return;
+  openModal(`<div class="modal-handle"></div><div class="modal-title">Delete "${esc(e.dish)}"?</div>
+    <div style="font-size:0.75rem;color:var(--text2);margin-bottom:14px">This entry will be removed. Other cooking entries are unaffected.</div>
+    <div class="modal-btns"><button class="btn block" onclick="openCookingDetail('${id}')">Cancel</button>
+    <button class="btn primary block" style="background:var(--red)" onclick="executeDeleteCookingEntry('${id}')">Delete</button></div>`);
+}
+async function executeDeleteCookingEntry(id) {
+  APP.cookingEntries = deleteCookingEntry(APP.cookingEntries, id);
+  await saveCookingEntries(APP.cookingEntries);
+  closeModal(); await renderCurrentView(); showToast('Deleted');
+}
+
+// ── LIFE TAB — RELIGIOUS JOURNAL (isolated; never touches Prayer/Commitments) ─
+async function openReligiousJournalEntry(date) {
+  const day = await loadReligiousDay(date);
+  openModal(renderReligiousJournalForm(day));
+}
+function addActivityRow() {
+  const container = document.getElementById('rj-activities');
+  const wrapper = document.createElement('div');
+  wrapper.innerHTML = renderActivityRow({ id: null, name: '', count: null, unit: '', notes: '' });
+  container.appendChild(wrapper.firstElementChild);
+}
+function removeActivityRow(rid) {
+  const row = document.querySelector(`[data-activity-row="${rid}"]`);
+  if (row) row.remove();
+}
+async function saveReligiousJournalEntry(date) {
+  await withSaveLock(async () => {
+    const day = await loadReligiousDay(date);
+    const rows = document.querySelectorAll('#rj-activities [data-activity-row]');
+    const newActivities = [];
+    rows.forEach((row) => {
+      const name = row.querySelector('.rj-name').value.trim();
+      if (!name) return; // silently skip blank rows
+      const countRaw = row.querySelector('.rj-count').value;
+      const count = countRaw === '' ? null : Number(countRaw);
+      const unit = row.querySelector('.rj-unit').value.trim();
+      const notes = row.querySelector('.rj-notes').value.trim();
+      const rid = row.getAttribute('data-activity-row');
+      const existing = day.activities.find((a) => a.id === rid);
+      newActivities.push({
+        id: existing ? existing.id : genActivityId(),
+        name, count: (typeof count === 'number' && isFinite(count) && count >= 0) ? count : null, unit, notes,
+      });
+    });
+    day.activities = newActivities;
+    day.notes = document.getElementById('rj-notes').value;
+    await saveReligiousDay(date, day);
+    closeModal(); await renderCurrentView(); showToast('Journal saved');
+  });
+}
+function confirmDeleteReligiousDay(date) {
+  openModal(`<div class="modal-handle"></div><div class="modal-title">Delete this day's journal?</div>
+    <div style="font-size:0.75rem;color:var(--text2);margin-bottom:14px">All activities recorded for ${fmtKeyLong(date)} will be removed. Prayers and Daily Commitments for that day are unaffected.</div>
+    <div class="modal-btns"><button class="btn block" onclick="openReligiousJournalEntry('${date}')">Cancel</button>
+    <button class="btn primary block" style="background:var(--red)" onclick="executeDeleteReligiousDay('${date}')">Delete</button></div>`);
+}
+async function executeDeleteReligiousDay(date) {
+  await saveReligiousDay(date, emptyReligiousDay(date));
+  closeModal(); await renderCurrentView(); showToast('Journal entry deleted');
 }
 
 // ── INIT ───────────────────────────────────────────────
