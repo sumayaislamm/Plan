@@ -100,7 +100,7 @@ function renderToday(S) {
 // modal. This is a rendering change only — reads the same canonical
 // timeEntries list as everything else; no second data source.
 function renderWorkLog(timeEntries, date, readonly) {
-  const entries = entriesForDate(timeEntries, date).slice().sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
+  const entries = entriesForDate(timeEntries, date).slice().sort((a, b) => (a.startTime || '').localeCompare(b.startTime || '') || (a.createdAt || '').localeCompare(b.createdAt || ''));
   if (!entries.length) return `<div class="card" style="text-align:center;color:var(--text3);font-size:0.72rem;font-style:italic">No work logged ${readonly ? 'that day' : 'yet today'}.</div>`;
 
   const total = entries.reduce((s, e) => s + e.minutes, 0);
@@ -121,7 +121,7 @@ function renderWorkLog(timeEntries, date, readonly) {
     </div>`;
     catEntries.forEach((e) => {
       html += `<div class="time-entry-row">
-        <div><div class="te-main">${esc(e.note || missionLabelById(cat))}</div>
+        <div><div class="te-main">${e.startTime ? esc(fmtStartTime(e.startTime)) + ' — ' : ''}${esc(e.note || missionLabelById(cat))}</div>
         <div class="te-meta te-source-${e.source}">${fmtMin(e.minutes)} · ${sourceLabel(e.source)}</div></div>
         ${!readonly ? `<div class="te-actions"><button onclick="editTimeEntry('${e.id}')">✎</button><button onclick="deleteTimeEntryPrompt('${e.id}')">✕</button></div>` : ''}
       </div>`;

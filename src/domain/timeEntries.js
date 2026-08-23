@@ -31,7 +31,7 @@ async function loadAllTimeEntries() {
 }
 async function saveAllTimeEntries(list) { await storeSet('time_entries', list); }
 
-function addTimeEntry(list, { date, category, activityId, minutes, source, note }) {
+function addTimeEntry(list, { date, category, activityId, minutes, source, note, startTime }) {
   const mins = validateMinutes(minutes);
   if (mins === null) return { list, entry: null, error: 'Invalid duration' };
   if (!TIME_ENTRY_CATEGORIES.includes(category)) return { list, entry: null, error: 'Invalid category' };
@@ -39,17 +39,19 @@ function addTimeEntry(list, { date, category, activityId, minutes, source, note 
   const entry = {
     id: genEntryId(), date, category, activityId: activityId || null,
     minutes: mins, source: source || 'manual', note: sanitizeNote(note),
+    startTime: sanitizeStartTime(startTime), // optional "HH:MM" — when in the day the session happened, distinct from createdAt (when it was logged)
     createdAt: now, updatedAt: now,
   };
   return { list: [...list, entry], entry, error: null };
 }
 
-function updateTimeEntry(list, id, { minutes, note }) {
+function updateTimeEntry(list, id, { minutes, note, startTime }) {
   const idx = list.findIndex((e) => e.id === id);
   if (idx < 0) return { list, error: 'Entry not found' };
   const mins = validateMinutes(minutes);
   if (mins === null) return { list, error: 'Invalid duration' };
   const updated = { ...list[idx], minutes: mins, note: sanitizeNote(note), updatedAt: new Date().toISOString() };
+  if (startTime !== undefined) updated.startTime = sanitizeStartTime(startTime);
   const next = [...list]; next[idx] = updated;
   return { list: next, error: null };
 }
@@ -61,6 +63,18 @@ function deleteTimeEntry(list, id) {
 function sanitizeNote(note) {
   if (typeof note !== 'string') return '';
   return note.slice(0, 200); // display escaping happens at render time; this just bounds length
+}
+// "HH:MM" 24-hour, from a native <input type="time">. Optional on every entry
+// (every existing category keeps working with no startTime at all); only the
+// Quran session form actually collects it.
+function sanitizeStartTime(t) {
+  if (typeof t !== 'string') return null;
+  return /^([01]\d|2[0-3]):([0-5]\d)$/.test(t) ? t : null;
+}
+function fmtStartTime(t) {
+  if (!t) return '';
+  const [h, m] = t.split(':').map(Number);
+  return fmt$(h, m); // reuses the existing 12-hour AM/PM formatter from time.js
 }
 
 // ── DERIVATION HELPERS (canonical source for mission progress) ─────────
@@ -81,6 +95,21 @@ function breakdownForDate(list, date) {
   return out;
 }
 function sourceLabel(source) { return source === 'focus' ? 'Focus' : source === 'manual' ? 'Manual' : 'Imported'; }
+
+// ── QURAN SESSIONS — a pure view over category='quran' entries. Zero new
+// storage: every session IS a normal timeEntries row (source of truth stays
+// singular), sorted by clock time when available so multiple same-day
+// sessions display in the order they actually happened.
+function quranSessionsForDate(list, date) {
+  return entriesForMissionDate(list, 'quran', date)
+    .slice()
+    .sort((a, b) => (a.startTime || '99:99').localeCompare(b.startTime || '99:99') || a.createdAt.localeCompare(b.createdAt));
+}
+// Dates with at least one Quran session — derived from the already-loaded
+// in-memory array, no async call, no cap.
+function allQuranSessionDates(list) {
+  return [...new Set((list || []).filter((e) => e.category === 'quran').map((e) => e.date))].sort((a, b) => b.localeCompare(a));
+}
 
 // Progress line text per the exact spec examples — never clamps actual to the stretch cap.
 function progressLine(mission, actualMinutes) {

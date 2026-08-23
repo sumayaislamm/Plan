@@ -127,6 +127,18 @@ main{padding-top:64px;padding-bottom:calc(70px + env(safe-area-inset-bottom, 0px
 .hc.checked .hc-box{background:var(--green);border-color:var(--green);color:#fff}
 .hc.checked .hc-name{color:var(--green)}
 
+/* ── QURAN SESSIONS TABLE (stacked, responsive — no real <table>, matches
+   the app's existing mobile-first row pattern) ─────────────── */
+.quran-table-head{display:flex;justify-content:space-between;font-size:0.54rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;padding:0 3px 6px}
+.quran-row{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:7px}
+.quran-row-top{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.quran-time{font-size:0.68rem;color:var(--gold);font-weight:600;flex-shrink:0}
+.quran-surah{font-size:0.82rem;color:var(--text);font-weight:500;flex:1;margin:0 8px}
+.quran-duration{font-size:0.72rem;color:var(--text2);flex-shrink:0}
+.quran-notes{font-size:0.65rem;color:var(--text3);margin-top:4px}
+.quran-actions{display:flex;gap:6px;margin-top:8px}
+.quran-actions button{background:var(--surface2);border:1px solid var(--border2);color:var(--text2);border-radius:6px;padding:4px 11px;font-size:0.65rem;cursor:pointer}
+
 /* ── ACTUAL TIME ENTRIES ─────────────────────── */
 .time-entry-row{display:flex;align-items:center;justify-content:space-between;gap:8px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:9px 12px;margin-bottom:6px}
 .te-main{font-size:0.75rem;color:var(--text)}

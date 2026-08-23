@@ -12,6 +12,7 @@ const APP = {
   currentProjectId: null, reviewYearMonth: null,
   editingEntryId: null, saving: false, analyticsPeriod: 'week', historyDetailDate: null,
   commitments: null, religiousDate: null, cookingEntries: [], cookingSearchQuery: '', editingCookingId: null,
+  religiousJournalDetailDate: null,
 };
 
 let toastTimer;
@@ -82,7 +83,7 @@ async function switchView(view, btn) {
   document.getElementById('view-' + view).classList.add('active');
   if (btn) btn.classList.add('active'); else { const b = document.querySelector(`.tabbtn[data-view="${view}"]`); if (b) b.classList.add('active'); }
   APP.currentView = view;
-  document.getElementById('nav-title').textContent = { today:'Today', missions:'Missions', ielts:'IELTS', programming:'Programming', jobs:'Jobs', weekly:'This Week', history:'History', religious:'Religious', life:'Life', review:'Monthly Review' }[view] || 'Life OS';
+  document.getElementById('nav-title').textContent = { today:'Today', missions:'Missions', ielts:'IELTS', programming:'Programming', jobs:'Jobs', weekly:'This Week', history:'History', religious:'Religious', life:'Journal', review:'Monthly Review' }[view] || 'Life OS';
   await renderCurrentView();
 }
 function switchViewByName(view) { switchView(view, document.querySelector(`.tabbtn[data-view="${view}"]`)); }
@@ -729,17 +730,24 @@ async function executeDeleteFeature(pid, fid) {
 // ── INIT ───────────────────────────────────────────────
 // ── LIFE TAB — COOKING JOURNAL (isolated) ───────────────
 async function buildLifeHtml() {
+  if (APP.religiousJournalDetailDate) {
+    const date = APP.religiousJournalDetailDate;
+    const religiousDay = await loadReligiousDay(date);
+    const quranSessions = quranSessionsForDate(APP.timeEntries, date);
+    return renderLife({ cookingEntries: [], searchQuery: '', allReligiousDates: [], religiousDetailDate: date, religiousDay, quranSessions });
+  }
   const religiousDates = await allReligiousJournalDates();
-  religiousDates.sort((a, b) => b.localeCompare(a));
-  APP.cachedReligiousDates = religiousDates; // reused by renderLifeSearchOnly so a search keystroke doesn't need a fresh async call
-  return renderLife({ cookingEntries: APP.cookingEntries, searchQuery: APP.cookingSearchQuery, religiousDates });
+  const quranDates = allQuranSessionDates(APP.timeEntries); // free — derived from the already-loaded canonical timeEntries, no extra call
+  const allReligiousDates = [...new Set([...religiousDates, ...quranDates])].sort((a, b) => b.localeCompare(a));
+  APP.cachedReligiousDates = allReligiousDates; // reused by renderLifeSearchOnly so a search keystroke doesn't need a fresh async call
+  return renderLife({ cookingEntries: APP.cookingEntries, searchQuery: APP.cookingSearchQuery, allReligiousDates, religiousDetailDate: null, religiousDay: null, quranSessions: null });
 }
 function setCookingSearch(q) { APP.cookingSearchQuery = q; renderLifeSearchOnly(); }
 // Re-renders just the cooking list portion in place, so the search input never loses focus mid-typing.
 function renderLifeSearchOnly() {
   const container = document.getElementById('view-life');
   if (!container) return;
-  container.innerHTML = renderLife({ cookingEntries: APP.cookingEntries, searchQuery: APP.cookingSearchQuery, religiousDates: APP.cachedReligiousDates || [] });
+  container.innerHTML = renderLife({ cookingEntries: APP.cookingEntries, searchQuery: APP.cookingSearchQuery, allReligiousDates: APP.cachedReligiousDates || [], religiousDetailDate: null, religiousDay: null, quranSessions: null });
   const input = document.getElementById('cooking-search');
   if (input) { input.focus(); input.selectionStart = input.selectionEnd = input.value.length; }
 }
@@ -764,6 +772,7 @@ function readCookingForm() {
     dish: document.getElementById('cf-dish').value,
     source: document.getElementById('cf-source').value,
     sourceUrl: document.getElementById('cf-url').value,
+    method: document.getElementById('cf-method').value,
     cookingTime: document.getElementById('cf-time').value ? Number(document.getElementById('cf-time').value) : null,
     result: document.getElementById('cf-result').value,
     rating: document.getElementById('cf-rating').value,
@@ -852,6 +861,64 @@ function confirmDeleteReligiousDay(date) {
 async function executeDeleteReligiousDay(date) {
   await saveReligiousDay(date, emptyReligiousDay(date));
   closeModal(); await renderCurrentView(); showToast('Journal entry deleted');
+}
+
+// ── RELIGIOUS JOURNAL — day-detail navigation (Quran sessions + Amal + Notes combined) ─
+function openReligiousJournalDate(date) { APP.religiousJournalDetailDate = date; renderCurrentView(); }
+function closeReligiousJournalDetail() { APP.religiousJournalDetailDate = null; renderCurrentView(); }
+
+// ── QURAN SESSIONS — pure timeEntries rows (category:'quran'); this is the
+// SAME canonical store every other actual-time feature already reads from
+// (mission progress, Weekly, Analytics, Work Log, the Religious tab's Quran
+// total). No second Quran tracker, no double counting.
+function openNewQuranSession(date) { openModal(renderQuranSessionForm(date, null)); }
+async function saveNewQuranSession(date) {
+  await withSaveLock(async () => {
+    const actualDate = document.getElementById('qs-date').value || date;
+    const startTime = document.getElementById('qs-time').value || null;
+    const note = document.getElementById('qs-surah').value;
+    const minutes = document.getElementById('qs-min').value;
+    const { list, error } = addTimeEntry(APP.timeEntries, { date: actualDate, category: 'quran', minutes, source: 'manual', note, startTime });
+    if (error) { const e = document.getElementById('qs-err'); e.textContent = error === 'Invalid duration' ? 'Enter a duration greater than 0 (and under 12h).' : error; e.style.display = 'block'; return; }
+    APP.timeEntries = list;
+    await saveAllTimeEntries(APP.timeEntries);
+    await refreshCore(); // recomputes mission actual time / weekly / momentum exactly like any other time entry
+    if (actualDate !== date) { closeModal(); await renderCurrentView(); showToast('Session logged'); return; }
+    openReligiousJournalDate(actualDate);
+    showToast('Session logged');
+  });
+}
+function openEditQuranSession(id) {
+  const s = APP.timeEntries.find((x) => x.id === id); if (!s) return;
+  openModal(renderQuranSessionForm(s.date, s));
+}
+async function saveEditQuranSession(id, date) {
+  await withSaveLock(async () => {
+    const startTime = document.getElementById('qs-time').value || null;
+    const note = document.getElementById('qs-surah').value;
+    const minutes = document.getElementById('qs-min').value;
+    const { list, error } = updateTimeEntry(APP.timeEntries, id, { minutes, note, startTime });
+    if (error) { const e = document.getElementById('qs-err'); e.textContent = 'Enter a duration greater than 0 (and under 12h).'; e.style.display = 'block'; return; }
+    APP.timeEntries = list;
+    await saveAllTimeEntries(APP.timeEntries);
+    await refreshCore();
+    openReligiousJournalDate(date);
+    showToast('Session updated');
+  });
+}
+function confirmDeleteQuranSession(id) {
+  const s = APP.timeEntries.find((x) => x.id === id); if (!s) return;
+  openModal(`<div class="modal-handle"></div><div class="modal-title">Delete this session?</div>
+    <div style="font-size:0.75rem;color:var(--text2);margin-bottom:14px">${s.startTime ? esc(fmtStartTime(s.startTime)) + ' — ' : ''}${esc(s.note || 'Quran reading')} (${fmtMin(s.minutes)}) will be removed. Other sessions that day are unaffected.</div>
+    <div class="modal-btns"><button class="btn block" onclick="openReligiousJournalDate('${s.date}')">Cancel</button>
+    <button class="btn primary block" style="background:var(--red)" onclick="executeDeleteQuranSession('${id}','${s.date}')">Delete</button></div>`);
+}
+async function executeDeleteQuranSession(id, date) {
+  APP.timeEntries = deleteTimeEntry(APP.timeEntries, id);
+  await saveAllTimeEntries(APP.timeEntries);
+  await refreshCore(); // recalculates the daily total and everything downstream from it
+  openReligiousJournalDate(date);
+  showToast('Session deleted');
 }
 
 // ── INIT ───────────────────────────────────────────────

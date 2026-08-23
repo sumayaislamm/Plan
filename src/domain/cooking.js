@@ -29,6 +29,7 @@ function normalizeCookingEntries(raw) {
     id: e.id, date: e.date, dish: e.dish,
     source: typeof e.source === 'string' ? e.source : '',
     sourceUrl: (typeof validateUrl === 'function' ? (validateUrl(e.sourceUrl) || '') : ''),
+    method: typeof e.method === 'string' ? e.method : '', // old entries without this field simply display nothing
     cookingTime: (typeof e.cookingTime === 'number' && isFinite(e.cookingTime) && e.cookingTime > 0) ? e.cookingTime : null,
     result: typeof e.result === 'string' ? e.result : '',
     rating: validateRating(e.rating),
@@ -47,6 +48,7 @@ function addCookingEntry(list, data) {
   const entry = {
     id: genCookingId(), date: data.date, dish: data.dish.trim(),
     source: (data.source || '').trim(), sourceUrl: validateUrl(data.sourceUrl || '') || '',
+    method: (data.method || '').trim(),
     cookingTime: (typeof data.cookingTime === 'number' && data.cookingTime > 0) ? data.cookingTime : null,
     result: (data.result || '').trim(), rating: validateRating(data.rating),
     tips: (data.tips || '').trim(), nextTimeChanges: (data.nextTimeChanges || '').trim(),
@@ -62,6 +64,7 @@ function updateCookingEntry(list, id, data) {
   const updated = {
     ...list[idx], date: data.date, dish: data.dish.trim(),
     source: (data.source || '').trim(), sourceUrl: validateUrl(data.sourceUrl || '') || '',
+    method: (data.method || '').trim(),
     cookingTime: (typeof data.cookingTime === 'number' && data.cookingTime > 0) ? data.cookingTime : null,
     result: (data.result || '').trim(), rating: validateRating(data.rating),
     tips: (data.tips || '').trim(), nextTimeChanges: (data.nextTimeChanges || '').trim(),
