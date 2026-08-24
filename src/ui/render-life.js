@@ -119,8 +119,8 @@ function renderReligiousJournalSection(allDates) {
 }
 
 // The full day view — replaces the list when a date is opened. This is the
-// "main Religious Journal experience" per spec: Quran table, Amal/Dhikr,
-// Notes, all for one date.
+// "main Religious Journal experience": Quran table, Amal/Dhikr, Notes, all
+// for one date.
 function renderReligiousJournalDayDetail(date, day, quranSessions) {
   const totalQuranMinutes = quranSessions.reduce((s, e) => s + e.minutes, 0);
   let html = `<button class="btn ghost block" style="margin-bottom:11px" onclick="closeReligiousJournalDetail()">← Back to Journal</button>`;
@@ -152,7 +152,7 @@ function renderReligiousJournalDayDetail(date, day, quranSessions) {
     </div>`;
   }
 
-  // 🤲 Amal / Dhikr — the general activity journal (unchanged from before, just relocated into this combined day view).
+  // 🤲 Amal / Dhikr — the general activity journal.
   html += `<div class="sec-hdr"><span class="sec-title">🤲 Amal / Dhikr</span><span class="sec-link" onclick="openReligiousJournalEntry('${date}')">Edit</span></div>`;
   if (!day.activities.length) {
     html += `<div class="card" style="text-align:center;color:var(--text3);font-size:0.72rem;font-style:italic">No activities logged for this date.</div>`;
@@ -183,31 +183,6 @@ function renderQuranSessionForm(date, session) {
     <div id="qs-err" style="font-size:0.65rem;color:var(--red);display:none;margin-bottom:8px"></div>
     <div class="modal-btns"><button class="btn block" onclick="${isEdit ? `openReligiousJournalDate('${date}')` : 'closeModal()'}">Cancel</button>
     <button class="btn primary block" onclick="${isEdit ? `saveEditQuranSession('${session.id}','${date}')` : `saveNewQuranSession('${date}')`}">Save</button></div>`;
-}
-
-function renderReligiousJournalForm(day) {
-  let html = `<div class="modal-handle"></div><div class="modal-title">Religious Journal — ${fmtKeyLong(day.date)}</div>
-    <div id="rj-activities">`;
-  day.activities.forEach((a) => { html += renderActivityRow(a); });
-  html += `</div>
-    <div class="sec-link" style="display:block;margin:4px 0 12px" onclick="addActivityRow()">+ Add activity</div>
-    <div class="field"><label>Notes</label><textarea id="rj-notes">${esc(day.notes)}</textarea></div>
-    <div class="modal-btns"><button class="btn block" onclick="closeModal()">Cancel</button>
-    <button class="btn primary block" style="background:var(--red)" onclick="confirmDeleteReligiousDay('${day.date}')">Delete Day</button>
-    <button class="btn primary block" onclick="saveReligiousJournalEntry('${day.date}')">Save</button></div>`;
-  return html;
-}
-function renderActivityRow(a) {
-  const rid = a.id || ('new_' + Math.random().toString(36).slice(2, 8));
-  return `<div class="card" data-activity-row="${rid}" style="margin-bottom:8px">
-    <div class="field"><label>Activity</label><input type="text" class="rj-name" value="${escAttr(a.name || '')}" placeholder="e.g. Surah Yasin"/></div>
-    <div style="display:flex;gap:6px">
-      <div class="field" style="flex:1"><label>Count</label><input type="number" min="0" class="rj-count" value="${a.count ?? ''}"/></div>
-      <div class="field" style="flex:1"><label>Unit</label><input type="text" class="rj-unit" value="${escAttr(a.unit || '')}" placeholder="x, pages..."/></div>
-    </div>
-    <div class="field"><label>Notes</label><input type="text" class="rj-notes" value="${escAttr(a.notes || '')}"/></div>
-    <div class="sec-link" style="color:var(--red)" onclick="removeActivityRow('${rid}')">Remove</div>
-  </div>`;
 }
 
 // ── History block ──

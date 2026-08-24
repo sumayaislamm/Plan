@@ -11,7 +11,7 @@ const APP = {
   focusPausedAccumMs: 0, focusPausedAt: null,
   currentProjectId: null, reviewYearMonth: null,
   editingEntryId: null, saving: false, analyticsPeriod: 'week', historyDetailDate: null,
-  commitments: null, religiousDate: null, cookingEntries: [], cookingSearchQuery: '', editingCookingId: null,
+  commitments: null, cookingEntries: [], cookingSearchQuery: '', editingCookingId: null,
   religiousJournalDetailDate: null,
 };
 
@@ -83,7 +83,7 @@ async function switchView(view, btn) {
   document.getElementById('view-' + view).classList.add('active');
   if (btn) btn.classList.add('active'); else { const b = document.querySelector(`.tabbtn[data-view="${view}"]`); if (b) b.classList.add('active'); }
   APP.currentView = view;
-  document.getElementById('nav-title').textContent = { today:'Today', missions:'Missions', ielts:'IELTS', programming:'Programming', jobs:'Jobs', weekly:'This Week', history:'History', religious:'Religious', life:'Journal', review:'Monthly Review' }[view] || 'Life OS';
+  document.getElementById('nav-title').textContent = { today:'Today', missions:'Missions', ielts:'IELTS', programming:'Programming', jobs:'Jobs', weekly:'This Week', history:'History', life:'Journal', review:'Monthly Review' }[view] || 'Life OS';
   await renderCurrentView();
 }
 function switchViewByName(view) { switchView(view, document.querySelector(`.tabbtn[data-view="${view}"]`)); }
@@ -158,8 +158,6 @@ async function renderCurrentView() {
       const logsById = {}; for (const k of keys) logsById[k] = await loadLog(k);
       document.getElementById('hist-list').innerHTML = renderHistoryList(keys, logsById, APP.missions, APP.timeEntries);
     }
-  } else if (view === 'religious') {
-    document.getElementById('view-religious').innerHTML = await buildReligiousHtml();
   } else if (view === 'life') {
     document.getElementById('view-life').innerHTML = await buildLifeHtml();
   } else if (view === 'review') {
@@ -659,34 +657,6 @@ async function saveLeetcodeEdit() {
 }
 
 // ── RELIGIOUS TAB (isolated — read-only; editing happens on Today) ─────
-async function buildReligiousHtml() {
-  const date = APP.religiousDate || APP.todayKey;
-  const isToday = date === APP.todayKey;
-  const log = await loadLog(date);
-  const prayerTimesForDate = await fetchPrayerTimes(date);
-  const commitments = await loadCommitments(date);
-  const quranMinutes = missionActualMinutes(APP.timeEntries, 'quran', date);
-  const religiousJournalDay = await loadReligiousDay(date);
-  // Full history, no artificial day cap — but lightweight: this only unions
-  // already-cheap key/date lists (no per-day loadLog/loadCommitments calls).
-  // The actual detailed record for a given date is only loaded when that
-  // date is opened (openReligiousDate re-runs this function for just that
-  // one date), so cost stays flat regardless of how much history exists.
-  const logDates = await allLogKeys(); // local+remote merged, already sorted desc
-  const commitDates = await allCommitmentDates();
-  const quranDates = [...new Set((APP.timeEntries || []).filter((e) => e.category === 'quran' && e.minutes > 0).map((e) => e.date))];
-  const religiousJournalDates = await allReligiousJournalDates();
-  const previousDates = [...new Set([...logDates, ...commitDates, ...quranDates, ...religiousJournalDates])]
-    .filter((d) => d !== date)
-    .sort((a, b) => b.localeCompare(a));
-  const canGoNext = addDays(date, 1) < APP.todayKey;
-  return renderReligious({ date, isToday, log, prayerTimes: prayerTimesForDate, commitments, quranMinutes, religiousJournalDay, previousDates, canGoNext });
-}
-function openReligiousDate(date) { APP.religiousDate = date; renderCurrentView(); }
-function religiousPrevDay() { openReligiousDate(addDays(APP.religiousDate || APP.todayKey, -1)); }
-function religiousNextDay() { const n = addDays(APP.religiousDate || APP.todayKey, 1); if (n <= APP.todayKey) openReligiousDate(n); }
-function religiousGoToday() { APP.religiousDate = null; renderCurrentView(); }
-
 // ── PROJECT ROADMAP (isolated — feature planned/completed status) ──────
 async function toggleFeatureCompletion(pid, fid) {
   const p = APP.projects.find((x) => x.id === pid); const f = p.features.find((x) => x.id === fid);
