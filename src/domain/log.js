@@ -9,6 +9,7 @@ function emptyLog(dateKey) {
     energyScore: null,      // 1-10 optional
     recoveryActive: false,
     recoveryReason: null,
+    periodDay: false,       // when true, all 5 prayers are exempt for this date — never counted completed or missed
     prayers: { fajr: false, dhuhr: false, asr: false, maghrib: false, isha: false },
     progress: {},           // { missionId: number } — COUNT-type missions only (real events, e.g. food/water taps).
                              // Time-type mission progress is NEVER stored here — it's derived from timeEntries.
@@ -39,6 +40,7 @@ function normalizeLog(raw, dateKey) {
   out.energyScore = (typeof raw.energyScore === 'number' && isFinite(raw.energyScore) && raw.energyScore >= 1 && raw.energyScore <= 10) ? raw.energyScore : null;
   out.recoveryActive = !!raw.recoveryActive;
   out.recoveryReason = typeof raw.recoveryReason === 'string' ? raw.recoveryReason : null;
+  out.periodDay = !!raw.periodDay;
   return out;
 }
 
@@ -59,6 +61,10 @@ function addCountProgress(log, missionId, amount, level) {
 function toggleQuickMin(log, missionId) { log.quickMin[missionId] = !log.quickMin[missionId]; }
 
 function togglePrayer(log, prayerKey) { log.prayers[prayerKey] = !log.prayers[prayerKey]; }
+// Period-day exemption toggle. Deliberately independent of prayers/prayer
+// completion — flipping this never touches log.prayers, so completion,
+// missed, and exempt states can never be confused with one another.
+function togglePeriodDayFlag(log) { log.periodDay = !log.periodDay; }
 
 async function allLogKeys() {
   const local = lsKeys('log_').map((k) => k.slice(4));
@@ -81,6 +87,7 @@ function mergeActivityDates(logKeys, timeEntries, jobs, projects, ielts) {
 
 // Any recorded activity at all for one date — used for History's empty state.
 function dayHasActivity(log, timeEntries, date, projects, jobs, ielts) {
+  if (log.periodDay) return true; // the exempt status itself is meaningful recorded data for that date
   if (log.prayers && Object.values(log.prayers).some(Boolean)) return true;
   if (entriesForDate(timeEntries, date).length) return true;
   if (log.progress && Object.values(log.progress).some((v) => v > 0)) return true;

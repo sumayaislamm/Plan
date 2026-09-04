@@ -198,6 +198,15 @@ async function togglePrayerToday(k) {
   await afterLogChange();
   showToast(APP.log.prayers[k] ? `🕌 Alhamdulillah` : 'Unchecked');
 }
+// Period-day exemption — independent of prayer completion state. Only ever
+// editable on the current day (readonly gating in renderPrayerStrip already
+// hides this control for historical dates, same rule as prayer toggling).
+async function togglePeriodDay() {
+  togglePeriodDayFlag(APP.log);
+  await saveLog(APP.viewingKey, APP.log);
+  await afterLogChange();
+  showToast(APP.log.periodDay ? '🩸 Period day — prayers exempt' : 'Period day ended');
+}
 // Quick action: COUNT-type missions get a real +1; TIME-type missions get a
 // pure "minimum acknowledged" flag that never fabricates worked minutes.
 async function quickAction(missionId) {

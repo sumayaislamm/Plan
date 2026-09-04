@@ -15,7 +15,7 @@ function nextBestAction({ missions, log, energy, recoveryActive, prayerTimes, we
   // and stayed true for the rest of the day.
   const prayerOrder = ['fajr', 'dhuhr', 'asr', 'maghrib', 'isha'];
   const prayerNames = { fajr: 'Fajr', dhuhr: 'Dhuhr', asr: 'Asr', maghrib: 'Maghrib', isha: 'Isha' };
-  if (prayerTimes) {
+  if (prayerTimes && !log.periodDay) {
     for (let i = 0; i < prayerOrder.length; i++) {
       const p = prayerOrder[i];
       if (log.prayers[p]) continue;

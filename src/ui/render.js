@@ -138,6 +138,14 @@ function missionLabelById(id) {
 }
 
 function renderPrayerStrip(log, pt, readonly) {
+  if (log.periodDay) {
+    return `<div class="sec-hdr"><span class="sec-title">🕌 Prayer Anchors</span><span class="sec-badge">Exempt</span></div>
+    <div class="card" style="text-align:center;padding:16px;margin-bottom:11px">
+      <div style="font-size:0.85rem;color:var(--text2);margin-bottom:4px">🌸 Prayer Exempt — Period</div>
+      <div style="font-size:0.7rem;color:var(--text3)">Not counted as missed or completed.</div>
+      ${!readonly ? `<div class="sec-link" style="margin-top:10px;display:inline-block" onclick="togglePeriodDay()">End period tracking</div>` : ''}
+    </div>`;
+  }
   const order = [['fajr','Fajr','🌅'],['dhuhr','Dhuhr','☀️'],['asr','Asr','🌤️'],['maghrib','Maghrib','🌇'],['isha','Isha','🌙']];
   const items = order.map(([k, name, emoji]) => {
     const done = !!log.prayers[k];
@@ -151,8 +159,9 @@ function renderPrayerStrip(log, pt, readonly) {
   }).join('');
   const done = Object.values(log.prayers).filter(Boolean).length;
   const fallbackNote = (pt && pt.__source === 'fallback') ? `<div style="font-size:0.56rem;color:var(--text3);margin:-6px 0 8px;font-style:italic">⚠ Using estimated prayer times — live times unavailable right now</div>` : '';
+  const periodToggle = !readonly ? `<div class="sec-link" style="text-align:center;display:block;margin:-4px 0 10px" onclick="togglePeriodDay()">Mark as period day</div>` : '';
   return `<div class="sec-hdr"><span class="sec-title">🕌 Prayer Anchors</span><span class="sec-badge${done===5?' done':''}">${done} / 5</span></div>
-  <div style="display:flex;gap:5px;margin-bottom:11px">${items}</div>${fallbackNote}`;
+  <div style="display:flex;gap:5px;margin-bottom:11px">${items}</div>${fallbackNote}${periodToggle}`;
 }
 
 function renderMomentumCard(momentum) {
@@ -229,7 +238,8 @@ function renderMissions(S) {
       const target = m.levels[level] || 1;
       let done, line;
       if (m.id === 'prayer') {
-        done = Object.values(log.prayers).filter(Boolean).length; line = `${done} / 5 today`;
+        if (log.periodDay) { done = null; line = 'Exempt — Period'; }
+        else { done = Object.values(log.prayers).filter(Boolean).length; line = `${done} / 5 today`; }
       } else if (m.type === 'time') {
         done = missionActualMinutes(timeEntries, m.id, log.date); line = progressLine(m, done);
       } else if (m.id === 'job-apps') {
@@ -237,10 +247,10 @@ function renderMissions(S) {
       } else {
         done = log.progress[m.id] || 0; line = `${done} / ${target} today`;
       }
-      const pct = target > 0 ? Math.min(100, Math.round((done / target) * 100)) : 0;
+      const pct = (done === null) ? null : (target > 0 ? Math.min(100, Math.round((done / target) * 100)) : 0);
       html += `<div class="mission-card${m.weight === 'primary' ? ' primary' : ''}" onclick="openMissionEditor('${m.id}')">
         <div class="mc-top"><span class="mc-name">${MISSION_ICON[m.id]||''} ${esc(m.name)}</span></div>
-        <div class="mc-track"><div class="mc-fill" style="width:${pct}%"></div></div>
+        <div class="mc-track">${pct === null ? '' : `<div class="mc-fill" style="width:${pct}%"></div>`}</div>
         <div class="mc-meta">${esc(line)}</div>
         <div class="mc-meta">Min ${fmtLevel(m,'minimum')} · Std ${fmtLevel(m,'standard')} · Stretch ${fmtLevel(m,'stretch')} · ${m.frequency}</div>
       </div>`;
@@ -446,10 +456,10 @@ function renderHistoryList(keys, logsById, missions, timeEntries) {
   return keys.map((k) => {
     const log = logsById[k];
     const score = Math.round(dailyCompletionScore(log, missions, timeEntries));
-    const prayerDone = Object.values(log.prayers).filter(Boolean).length;
+    const prayerLine = log.periodDay ? '🌸 Prayer Exempt — Period' : `🕌 ${Object.values(log.prayers).filter(Boolean).length}/5 prayers`;
     return `<div class="list-item" onclick="openHistoryDetail('${k}')">
       <div class="li-top"><span class="li-title">${fmtKey(k)}</span><span style="color:var(--gold);font-weight:700">${score}%</span></div>
-      <div class="li-sub">🕌 ${prayerDone}/5 prayers${log.recoveryActive ? ' · 🌊 recovery day' : ''}${log.reflection?.accomplished ? ' · "'+esc(log.reflection.accomplished.slice(0,40))+'"' : ''}</div>
+      <div class="li-sub">${prayerLine}${log.recoveryActive ? ' · 🌊 recovery day' : ''}${log.reflection?.accomplished ? ' · "'+esc(log.reflection.accomplished.slice(0,40))+'"' : ''}</div>
     </div>`;
   }).join('');
 }

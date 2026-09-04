@@ -31,7 +31,7 @@ function dailyCompletionScore(log, missions, timeEntries) {
     weightedDone += w * ratio;
   });
   const prayerRatio = (log.prayers ? Object.values(log.prayers).filter(Boolean).length : 0) / 5;
-  weightedTotal += 2; weightedDone += 2 * prayerRatio;
+  if (!log.periodDay) { weightedTotal += 2; weightedDone += 2 * prayerRatio; } // period days: prayer excluded entirely, neither penalized nor rewarded
   return weightedTotal > 0 ? (weightedDone / weightedTotal) * 100 : 0;
 }
 
