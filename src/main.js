@@ -12,6 +12,7 @@ const APP = {
   currentProjectId: null, reviewYearMonth: null,
   editingEntryId: null, saving: false, analyticsPeriod: 'week', historyDetailDate: null,
   commitments: null, cookingEntries: [], cookingSearchQuery: '', editingCookingId: null,
+  plannedWork: [], editingPlannedWorkId: null,
   religiousJournalDetailDate: null,
 };
 
@@ -42,6 +43,7 @@ async function refreshCore() {
   APP.jobs = await loadJobs();
   APP.commitments = await loadCommitments(APP.viewingKey);
   APP.cookingEntries = await loadCookingEntries();
+  APP.plannedWork = await loadPlannedWork();
   APP.weekStart = weekStartKey(new Date(APP.viewingKey + 'T00:00:00'));
   APP.weekLogs = await loadWeekLogs(APP.weekStart);
   APP.weekProgress = {};
@@ -73,6 +75,8 @@ function currentState() {
     viewingKey: APP.viewingKey, isPast: APP.viewingKey < APP.todayKey,
     weekProgress: APP.weekProgress, weekStart: APP.weekStart, timeEntries: APP.timeEntries,
     analyticsPeriod: APP.analyticsPeriod, commitments: APP.commitments,
+    plannedWorkToday: plannedWorkForDate(APP.plannedWork, APP.viewingKey),
+    plannedWorkUpcoming: upcomingPlannedWork(APP.plannedWork, APP.viewingKey),
   };
 }
 
@@ -100,16 +104,17 @@ async function buildHistoryDetailHtml(date) {
   const featureActivity = featuresCompletedOnDate(APP.projects, date);
   const commitmentsForDate = await loadCommitments(date);
   const cookingForDate = cookingEntriesForDate(APP.cookingEntries, date);
+  const plannedWorkForDay = plannedWorkForDate(APP.plannedWork, date);
   const religiousJournalForDate = await loadReligiousDay(date);
   const momentumScore = momentumForDate(APP.momentumSeries, date);
   const hasActivity = dayHasActivity(log, APP.timeEntries, date, APP.projects, APP.jobs, APP.ielts)
     || featureActivity.length > 0 || commitmentsHasActivity(commitmentsForDate)
-    || cookingForDate.length > 0 || religiousDayHasActivity(religiousJournalForDate);
+    || cookingForDate.length > 0 || religiousDayHasActivity(religiousJournalForDate) || plannedWorkForDay.length > 0;
   const canGoNext = addDays(date, 1) < APP.todayKey;
   return renderHistoryDetail({
     date, log, prayerTimes: prayerTimesForDate, timeEntries: APP.timeEntries, missions: APP.missions,
     momentumScore, taskActivity, jobActivity, ieltsTaskActivity, featureActivity, commitments: commitmentsForDate,
-    cookingEntries: cookingForDate, religiousJournalDay: religiousJournalForDate,
+    cookingEntries: cookingForDate, religiousJournalDay: religiousJournalForDate, plannedWorkForDay,
     hasActivity, canGoNext,
   });
 }
@@ -154,7 +159,8 @@ async function renderCurrentView() {
       const featureDates = []; APP.projects.forEach((p) => p.features.forEach((f) => { if (f.completedAt) featureDates.push(f.completedAt); }));
       const cookingDates = allCookingDates(APP.cookingEntries);
       const religiousJournalDates = await allReligiousJournalDates();
-      keys = [...new Set([...keys, ...commitDates, ...featureDates, ...cookingDates, ...religiousJournalDates])].sort((a, b) => b.localeCompare(a));
+      const plannedWorkDates = allPlannedWorkDates(APP.plannedWork);
+      keys = [...new Set([...keys, ...commitDates, ...featureDates, ...cookingDates, ...religiousJournalDates, ...plannedWorkDates])].sort((a, b) => b.localeCompare(a));
       const logsById = {}; for (const k of keys) logsById[k] = await loadLog(k);
       document.getElementById('hist-list').innerHTML = renderHistoryList(keys, logsById, APP.missions, APP.timeEntries);
     }
@@ -898,6 +904,55 @@ async function executeDeleteQuranSession(id, date) {
   await refreshCore(); // recalculates the daily total and everything downstream from it
   openReligiousJournalDate(date);
   showToast('Session deleted');
+}
+
+// ── PLANNED WORK (isolated — planning/reminder layer only; never touches
+// missions, commitments, timeEntries, Focus, IELTS, Programming, or Jobs) ─
+function openNewPlannedWork() {
+  if (APP.viewingKey !== APP.todayKey) { showToast('Historical days are read-only'); return; }
+  openModal(renderPlannedWorkForm(null, APP.viewingKey));
+}
+async function saveNewPlannedWork() {
+  await withSaveLock(async () => {
+    const data = { date: document.getElementById('pw-date').value, title: document.getElementById('pw-title').value, notes: document.getElementById('pw-notes').value };
+    const { list, error } = addPlannedWorkItem(APP.plannedWork, data);
+    if (error) { const e = document.getElementById('pw-err'); e.textContent = error; e.style.display = 'block'; return; }
+    APP.plannedWork = list;
+    await savePlannedWork(APP.plannedWork);
+    closeModal(); await renderCurrentView(); showToast('Planned work added');
+  });
+}
+function openEditPlannedWork(id) {
+  const item = APP.plannedWork.find((x) => x.id === id); if (!item) return;
+  openModal(renderPlannedWorkForm(item));
+}
+async function saveEditPlannedWork(id) {
+  await withSaveLock(async () => {
+    const data = { date: document.getElementById('pw-date').value, title: document.getElementById('pw-title').value, notes: document.getElementById('pw-notes').value };
+    const { list, error } = updatePlannedWorkItem(APP.plannedWork, id, data);
+    if (error) { const e = document.getElementById('pw-err'); e.textContent = error; e.style.display = 'block'; return; }
+    APP.plannedWork = list;
+    await savePlannedWork(APP.plannedWork);
+    closeModal(); await renderCurrentView(); showToast('Saved');
+  });
+}
+async function togglePlannedWorkDone(id) {
+  if (APP.viewingKey !== APP.todayKey) { showToast('Historical days are read-only'); return; }
+  APP.plannedWork = togglePlannedWorkItem(APP.plannedWork, id);
+  await savePlannedWork(APP.plannedWork);
+  await renderCurrentView();
+}
+function confirmDeletePlannedWork(id) {
+  const item = APP.plannedWork.find((x) => x.id === id); if (!item) return;
+  openModal(`<div class="modal-handle"></div><div class="modal-title">Delete "${esc(item.title)}"?</div>
+    <div style="font-size:0.75rem;color:var(--text2);margin-bottom:14px">This planned item will be removed. Other planned items are unaffected.</div>
+    <div class="modal-btns"><button class="btn block" onclick="closeModal()">Cancel</button>
+    <button class="btn primary block" style="background:var(--red)" onclick="executeDeletePlannedWork('${id}')">Delete</button></div>`);
+}
+async function executeDeletePlannedWork(id) {
+  APP.plannedWork = deletePlannedWorkItem(APP.plannedWork, id);
+  await savePlannedWork(APP.plannedWork);
+  closeModal(); await renderCurrentView(); showToast('Deleted');
 }
 
 // ── INIT ───────────────────────────────────────────────

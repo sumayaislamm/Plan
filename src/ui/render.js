@@ -92,6 +92,9 @@ function renderToday(S) {
 
   html += renderDailyCommitmentsSection(S.commitments, S.isPast);
 
+  html += renderPlannedForTodaySection(S.plannedWorkToday, S.isPast, S.viewingKey);
+  if (!S.isPast) html += renderUpcomingPlannedSection(S.plannedWorkUpcoming);
+
   return html;
 }
 
@@ -470,7 +473,7 @@ function renderHistoryList(keys, logsById, missions, timeEntries) {
 // exactly as Today does, so the same entries/prayer state render identically
 // in both places (single source of truth, no history-specific copies).
 function renderHistoryDetail(D) {
-  const { date, log, prayerTimes, timeEntries, missions, momentumScore, taskActivity, jobActivity, ieltsTaskActivity, featureActivity, commitments, cookingEntries, religiousJournalDay, hasActivity, canGoNext } = D;
+  const { date, log, prayerTimes, timeEntries, missions, momentumScore, taskActivity, jobActivity, ieltsTaskActivity, featureActivity, commitments, cookingEntries, religiousJournalDay, plannedWorkForDay, hasActivity, canGoNext } = D;
 
   let html = `<button class="btn ghost block" style="margin-bottom:11px" onclick="closeHistoryDetail()">← Back to History</button>`;
   html += `<div class="hero"><div class="hero-eyebrow">${fmtKeyLong(date)}</div><h1 class="hero-title">Day <em>Retrospective</em></h1></div>`;
@@ -548,6 +551,7 @@ function renderHistoryDetail(D) {
 
   html += renderCookingHistoryBlock(cookingEntries);
   html += renderReligiousJournalHistoryBlock(religiousJournalDay);
+  html += renderPlannedWorkHistoryBlock(plannedWorkForDay);
 
   if (jobActivity.length) {
     html += `<div class="sec-hdr"><span class="sec-title">Jobs</span></div><div class="card">`;
